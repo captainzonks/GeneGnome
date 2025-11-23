@@ -1,0 +1,1157 @@
+/* ============================================================================
+   RESULTS EXAMPLE PAGE - EDUCATIONAL ATTAINMENT
+   Matches GeneGnome aesthetic with earth tones and professional styling
+   ============================================================================ */
+
+/* Global paragraph justification for textbook appearance */
+p {
+    text-align: justify !important;
+}
+
+/* Centered text overrides */
+p[align="center"] {
+    text-align: center !important;
+}
+
+/* Example Notice */
+.example-notice {
+    font-size: 0.875rem;
+    color: var(--warning-color);
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+/* Section Spacing */
+main > section {
+    margin-bottom: 4rem;
+}
+
+main > section:last-child {
+    margin-bottom: 2rem;
+}
+
+/* Section Intro */
+.section-intro {
+    max-width: 800px;
+    margin: 0 auto 2rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* ============================================================================
+   CUSTOMER PROFILE BOX
+   ============================================================================ */
+
+.customer-profile {
+    background: var(--card-bg);
+    border: 2px solid var(--primary-color);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 2rem auto;
+    max-width: 600px;
+    text-align: center;
+}
+
+.customer-profile h3 {
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    font-size: 1.125rem;
+}
+
+.profile-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    align-items: left;
+}
+
+.profile-details p {
+    font-size: 0.9375rem;
+    margin: 0;
+    text-align: left !important;
+}
+
+.profile-note {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 0;
+    text-align: center !important;
+}
+
+/* ============================================================================
+   SECTION 1: RESULTS HERO (SCORE DISPLAY)
+   ============================================================================ */
+
+.results-hero {
+    text-align: center;
+    padding: 3rem 2rem;
+    background: var(--card-bg);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+}
+
+.results-hero h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.customer-greeting {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    text-align: center !important;
+}
+
+.score-display {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4rem;
+    margin-bottom: 2rem;
+}
+
+.score-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.score-number {
+    font-size: 5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    line-height: 1;
+}
+
+.score-label {
+    font-size: 1.125rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.percentile-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.percentile-number {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--secondary-color);
+    line-height: 1;
+}
+
+.percentile-suffix {
+    font-size: 1.5rem;
+    vertical-align: super;
+}
+
+.percentile-label {
+    font-size: 1.125rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.score-explanation {
+    max-width: 700px;
+    margin: 2rem auto;
+    font-size: 1.125rem;
+    line-height: 1.7;
+}
+
+/* Chart Container */
+.chart-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+    background: var(--bg-color);
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.chart-container h3 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-color);
+}
+
+.chart-container-small {
+    max-width: 400px;
+    margin: 1.5rem auto;
+}
+
+/* ============================================================================
+   SECTION 2: PREDICTION SECTION
+   ============================================================================ */
+
+.prediction-section h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.prediction-display {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.prediction-card {
+    background: var(--card-bg);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+    border: 2px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.prediction-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.prediction-card.primary {
+    border-color: var(--primary-color);
+    background: linear-gradient(135deg, var(--card-bg) 0%, var(--bg-color) 100%);
+}
+
+.prediction-card.comparison {
+    border-color: var(--secondary-color);
+}
+
+.prediction-card h3 {
+    font-size: 1.125rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.prediction-value {
+    font-size: 3.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.prediction-card.primary .prediction-value {
+    color: var(--primary-color);
+}
+
+.prediction-card.comparison .prediction-value {
+    color: var(--secondary-color);
+}
+
+.prediction-value span {
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+}
+
+.prediction-context {
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+/* ============================================================================
+   EDUCATION PROGRESS METER
+   ============================================================================ */
+
+.timeline-container {
+    margin: 3rem 0;
+    padding: 2rem;
+    background: var(--card-bg);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+}
+
+.timeline-container h3 {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: var(--primary-color);
+}
+
+.progress-meter {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 0;
+}
+
+.meter-track {
+    position: relative;
+    height: 20px;
+    background: var(--border-color);
+    border-radius: 10px;
+    overflow: visible;
+    margin-top: 3rem;
+    margin-bottom: 2.5rem;
+}
+
+.meter-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, var(--secondary-color) 0%, var(--primary-color) 100%);
+    border-radius: 10px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.milestone {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    background: var(--card-bg);
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 2;
+}
+
+.milestone:hover {
+    width: 16px;
+    height: 16px;
+    border-color: var(--primary-color);
+}
+
+.milestone::after {
+    content: attr(data-degree);
+    position: absolute;
+    bottom: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translate(-65%, -175%) rotate(45deg);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.user-score-marker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+}
+
+.user-score-marker::after {
+    content: attr(data-degree);
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.score-indicator {
+    width: 24px;
+    height: 24px;
+    background: var(--primary-color);
+    border: 4px solid var(--card-bg);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px var(--primary-color), 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.user-score-marker:hover .score-indicator {
+    width: 28px;
+    height: 28px;
+    box-shadow: 0 0 0 4px var(--primary-color), 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.user-score-popup {
+    position: absolute;
+    bottom: calc(100% + 1rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary-color);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.user-score-popup::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid var(--primary-color);
+}
+
+.user-score-marker:hover .user-score-popup {
+    opacity: 1;
+}
+
+.user-score-popup strong {
+    display: block;
+    font-size: 1rem;
+    margin-top: 0.25rem;
+}
+
+.meter-scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    padding: 0 0.5rem;
+}
+
+.meter-scale span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .progress-meter {
+        padding: 1.5rem 0;
+    }
+
+    .meter-track {
+        margin-top: 2.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .milestone::after {
+        font-size: 0.625rem;
+    }
+
+    .milestone-high::after {
+        bottom: calc(100% + 1.25rem);
+    }
+
+    .milestone-low::after {
+        bottom: calc(100% + 0.5rem);
+    }
+
+    .user-score-marker::after {
+        font-size: 0.65rem;
+    }
+
+    .user-score-popup {
+        font-size: 0.75rem;
+        padding: 0.375rem 0.75rem;
+    }
+
+    .user-score-popup strong {
+        font-size: 0.875rem;
+    }
+
+    .meter-scale span {
+        font-size: 0.675rem;
+    }
+}
+
+/* ============================================================================
+   SECTION 3: GENETICS BASICS (CONCEPT CARDS)
+   ============================================================================ */
+
+.genetics-basics h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.concept-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 2rem;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.concept-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.concept-card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.concept-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.concept-header h3 {
+    font-size: 1.125rem;
+    color: var(--text-color);
+    margin: 0;
+    flex: 1;
+    margin-right: 1rem;
+}
+
+.expand-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 1.5rem;
+    line-height: 0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.expand-btn:hover {
+    background: var(--primary-dark);
+    transform: scale(1.1);
+}
+
+.concept-card.expanded .expand-btn {
+    transform: rotate(45deg);
+}
+
+.concept-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.6s cubic-bezier(0.4, 0, 0.2, 1), padding 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 1.5rem 0 1.5rem;
+}
+
+.concept-card.expanded .concept-content {
+    max-height: 2500px;
+    padding: 0 1.5rem 1.5rem;
+}
+
+.concept-content p {
+    line-height: 1.7;
+    color: var(--text-color);
+}
+
+/* Content with Image Layout (for DNA section) */
+.content-with-image {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.content-text {
+    flex: 1;
+}
+
+.content-image {
+    flex-shrink: 0;
+    max-width: 200px;
+}
+
+/* Larger image variant */
+.content-image-large {
+    max-width: 340px;
+}
+
+.content-image img {
+    width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    align-self: center;
+}
+
+.content-image-credit {
+    font-size: 10px;
+    font-weight: 400;
+    text-align: left;
+    color: var(--primary-color);
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 768px) {
+    .content-with-image {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .content-image {
+        max-width: 150px;
+    }
+}
+
+/* ============================================================================
+   SECTION 4: SCIENTIFIC DETAILS
+   ============================================================================ */
+
+.scientific-details {
+    background: var(--card-bg);
+    border-radius: 1rem;
+    padding: 3rem 2rem;
+    border: 1px solid var(--border-color);
+}
+
+.scientific-details h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.detail-sections {
+    margin-top: 2rem;
+}
+
+.detail-card {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.detail-card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    cursor: pointer;
+    user-select: none;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-card.expanded .detail-header {
+    background: var(--bg-color);
+}
+
+.detail-header h3 {
+    font-size: 1.25rem;
+    color: var(--text-color);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    margin-right: 1rem;
+}
+
+.detail-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), padding 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 1.5rem 0 1.5rem;
+}
+
+.detail-card.expanded .detail-content {
+    max-height: 3000px;
+    padding: 1.5rem;
+}
+
+.detail-content h4 {
+    color: var(--primary-color);
+    font-size: 1.125rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.detail-content h4:first-child {
+    margin-top: 0;
+}
+
+.detail-content p {
+    line-height: 1.7;
+    margin-bottom: 1rem;
+}
+
+.detail-content ul {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.detail-content li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+.citation {
+    background: var(--card-bg);
+    padding: 1rem;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 0.25rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+}
+
+/* ============================================================================
+   SECTION 5: CONSIDERATIONS GRID
+   ============================================================================ */
+
+.considerations-section h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.consideration-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.consideration-card {
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.consideration-card:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.consideration-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.consideration-card h3 {
+    font-size: 1.125rem;
+    color: var(--primary-color);
+    margin-bottom: 0.75rem;
+}
+
+.consideration-card p {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    text-align: left !important;
+    hyphens: auto;
+}
+
+/* ============================================================================
+   SECTION 6: FAQ
+   ============================================================================ */
+
+.faq-section h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 2rem;
+}
+
+.faq-list {
+    max-width: 800px;
+    margin: 0 auto 3rem;
+}
+
+.faq-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.faq-item:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.faq-question {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.faq-question h3 {
+    font-size: 1.125rem;
+    color: var(--text-color);
+    margin: 0;
+    flex: 1;
+    margin-right: 1rem;
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.6s cubic-bezier(0.4, 0, 0.2, 1), padding 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 1.5rem 0 1.5rem;
+}
+
+.faq-item.expanded .faq-answer {
+    max-height: 500px;
+    padding: 0 1.5rem 1.5rem;
+}
+
+.faq-answer p {
+    line-height: 1.7;
+    color: var(--text-color);
+}
+
+/* Resources Section */
+.resources-section {
+    max-width: 800px;
+    margin: 3rem auto 0;
+    padding: 2rem;
+    background: var(--card-bg);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+}
+
+.resources-section h3 {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.resource-links {
+    display: grid;
+    gap: 1rem;
+}
+
+.resource-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    text-decoration: none;
+    color: var(--text-color);
+    transition: all 0.3s ease;
+}
+
+.resource-link:hover {
+    border-color: var(--primary-color);
+    transform: translateX(4px);
+    box-shadow: var(--shadow);
+}
+
+.resource-icon {
+    font-size: 2rem;
+}
+
+.resource-link strong {
+    display: block;
+    color: var(--primary-color);
+    margin-bottom: 0.25rem;
+}
+
+.resource-link span {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* ============================================================================
+   FOOTER
+   ============================================================================ */
+
+.results-footer {
+    text-align: center;
+    padding: 2rem;
+    margin-top: 4rem;
+    border-top: 2px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.footer-note {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.footer-disclaimer {
+    margin-top: 1rem;
+    font-size: 0.8125rem;
+}
+
+.results-footer a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.results-footer a:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .score-display {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .score-number {
+        font-size: 4rem;
+    }
+
+    .percentile-value {
+        font-size: 2.5rem;
+    }
+
+    .prediction-display {
+        grid-template-columns: 1fr;
+    }
+
+    .timeline {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .timeline::before {
+        width: 3px;
+        height: 100%;
+        left: 50%;
+        top: 0;
+    }
+
+    .consideration-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================================================
+   PRINT STYLES (for submission)
+   ============================================================================ */
+
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+
+    .dark-mode-toggle,
+    .header-nav {
+        display: none;
+    }
+
+    .concept-content,
+    .detail-content,
+    .faq-answer {
+        max-height: none !important;
+        padding: 0 1.5rem 1.5rem !important;
+    }
+
+    .expand-btn {
+        display: none;
+    }
+
+    section {
+        page-break-inside: avoid;
+    }
+}
+
+/* ============================================================================
+   CALCULATION BOX STYLING
+   ============================================================================ */
+
+.calculation-box {
+    background: linear-gradient(135deg, var(--card-bg) 0%, var(--surface-color) 100%);
+    border: 2px solid var(--primary-color);
+    border-radius: 1rem;
+    padding: 2rem;
+    margin: 2rem 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.calculation-box h4 {
+    color: var(--primary-color);
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    font-weight: 600;
+}
+
+.calculation-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.calc-step {
+    background: var(--calc-step-bg, var(--card-bg));
+    border-left: 4px solid var(--primary-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.calc-step:hover {
+    transform: translateX(5px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Theme-specific calculation step backgrounds */
+
+/* Earth Theme */
+body[data-theme="earth"] .calc-step,
+body:not([data-theme]) .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(193, 116, 74, 0.08) 0%, rgba(122, 132, 80, 0.08) 100%);
+}
+
+body.dark-mode[data-theme="earth"] .calc-step,
+body.dark-mode:not([data-theme]) .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(212, 130, 95, 0.15) 0%, rgba(150, 160, 95, 0.15) 100%);
+}
+
+/* Medical Theme */
+body[data-theme="medical"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(74, 144, 193, 0.08) 0%, rgba(80, 120, 160, 0.08) 100%);
+}
+
+body.dark-mode[data-theme="medical"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(95, 168, 212, 0.15) 0%, rgba(107, 150, 180, 0.15) 100%);
+}
+
+/* Sunshine Theme */
+body[data-theme="sunshine"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(232, 168, 68, 0.08) 0%, rgba(212, 122, 58, 0.08) 100%);
+}
+
+body.dark-mode[data-theme="sunshine"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(245, 184, 85, 0.15) 0%, rgba(232, 144, 90, 0.15) 100%);
+}
+
+/* Spring Theme */
+body[data-theme="spring"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(107, 168, 74, 0.08) 0%, rgba(120, 168, 95, 0.08) 100%);
+}
+
+body.dark-mode[data-theme="spring"] .calc-step {
+    --calc-step-bg: linear-gradient(135deg, rgba(123, 196, 90, 0.15) 0%, rgba(136, 184, 107, 0.15) 100%);
+}
+
+/* Dark mode calculation box backgrounds by theme */
+
+/* Earth Theme - dark mode */
+body.dark-mode[data-theme="earth"] .calculation-box,
+body.dark-mode:not([data-theme]) .calculation-box {
+    background: linear-gradient(135deg, rgba(193, 116, 74, 0.15) 0%, rgba(122, 132, 80, 0.15) 100%);
+}
+
+/* Medical Theme - dark mode */
+body.dark-mode[data-theme="medical"] .calculation-box {
+    background: linear-gradient(135deg, rgba(74, 144, 193, 0.15) 0%, rgba(80, 120, 160, 0.15) 100%);
+}
+
+/* Sunshine Theme - dark mode */
+body.dark-mode[data-theme="sunshine"] .calculation-box {
+    background: linear-gradient(135deg, rgba(232, 168, 68, 0.15) 0%, rgba(212, 122, 58, 0.15) 100%);
+}
+
+/* Spring Theme - dark mode */
+body.dark-mode[data-theme="spring"] .calculation-box {
+    background: linear-gradient(135deg, rgba(107, 168, 74, 0.15) 0%, rgba(120, 168, 95, 0.15) 100%);
+}
+
+.step-label {
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.step-label::before {
+    content: "→";
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.step-math {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin: 0.75rem 0;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    overflow-x: auto;
+    text-align: center;
+}
+
+.step-explanation {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-top: 0.75rem;
+    font-style: italic;
+}
+
+/* MathJax styling adjustments */
+.MathJax {
+    font-size: 1.1em !important;
+}
+
+/* Dark mode adjustments for calculation box */
+body.dark-mode .step-math {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .calculation-box {
+        padding: 1.5rem;
+    }
+
+    .calc-step {
+        padding: 1rem;
+    }
+
+    .step-math {
+        font-size: 0.95rem;
+        padding: 0.75rem;
+    }
+}

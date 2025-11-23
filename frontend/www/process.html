@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server-Side Processing - Stisty Genetics</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="images/favicon/site.webmanifest">
+    <link rel="stylesheet" href="style.css?v=20251121">
+    <link rel="stylesheet" href="process.css?v=20251121">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <div class="header-title-row">
+                        <div class="header-logo">
+                            <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+                            <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+                        </div>
+                        <h1>GeneGnome</h1>
+                    </div>
+                    <p class="subtitle">Processor: Server-Side Analysis | Merge Imputation Results with Genomic Data</p>
+                    <nav class="header-nav">
+                        <a href="home.html">⇦ Back to Home</a>
+                    </nav>
+                </div>
+                <div class="theme-controls">
+                    <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+                        <span class="icon-sun">☀️</span>
+                        <span class="icon-moon">🌙</span>
+                    </button>
+                    <div class="theme-selector-dropdown">
+                        <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+                            🎨 Theme
+                        </button>
+                        <div id="themeSelectorMenu" class="theme-selector-menu">
+                            <div class="theme-selector-option active" data-theme="earth">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                                </div>
+                                <span class="theme-selector-label">Earth</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="medical">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                                </div>
+                                <span class="theme-selector-label">Medical</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="sunshine">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Sunshine</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="spring">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Spring</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="info-box info-blue" style="margin-bottom: 2rem;">
+            <h4>📋 Required Files for Processing</h4>
+            <p style="margin-bottom: 0.75rem;">To use this processor, you need imputed VCF files from the Michigan Imputation Server or TOPMed. Upload the following:</p>
+            <div class="file-requirements">
+                <div class="requirement">
+                    <strong>1. Original 23andMe File</strong>
+                    <code>genome_*.txt</code>
+                    <span class="file-size">~25MB</span>
+                </div>
+                <div class="requirement">
+                    <strong>2. Imputed VCF Files (chr1-22)</strong>
+                    <code>chr1.dose.vcf.gz, chr2.dose.vcf.gz, ...</code>
+                    <span class="file-size">~3.4GB total</span>
+                </div>
+                <div class="requirement">
+                    <strong>3. PGS Scores (optional)</strong>
+                    <code>scores.txt or *.pgs</code>
+                    <span class="file-size">~1MB</span>
+                </div>
+            </div>
+            <p style="margin-top: 0.75rem; font-size: 0.875rem; opacity: 0.85;">
+                <strong>Don't have imputed files yet?</strong> Start with our <a href="index.html" style="color: var(--primary-color); font-weight: 600;">VCF Generator</a> to create files for the Michigan Imputation Server.
+            </p>
+        </div>
+
+        <main>
+            <!-- Upload Section -->
+            <section id="uploadSection" class="upload-section">
+                <h2>Upload Your Files</h2>
+                <p class="help-text">Upload your original 23andMe data, imputed VCF files (chr1-22), and PGS scores</p>
+
+                <!-- File Drop Zone -->
+                <div id="dropZone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <h3>Drag & Drop Files Here</h3>
+                        <p>or click to browse</p>
+                        <input type="file" id="fileInput" multiple hidden>
+                        <button id="browseButton" class="btn btn-primary">Choose Files</button>
+                    </div>
+                </div>
+
+                <!-- Email Input -->
+                <div id="emailSection" class="email-section hidden">
+                    <h3>Email for Download Notification</h3>
+                    <p class="help-text">We'll email you a secure download link when processing completes (typically 10-20 minutes)</p>
+                    <div class="email-input-group">
+                        <input type="email" id="emailInput" placeholder="your@email.com" required>
+                        <span class="input-hint">Required for secure download delivery</span>
+                    </div>
+                    <div class="info-box info-blue" style="margin-top: 1rem; font-size: 0.875rem;">
+                        <p style="margin: 0;">
+                            🔒 <strong>Privacy:</strong> Your email is only used to send the download link.
+                            Results expire after 24 hours and are automatically deleted.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- File List -->
+                <div id="fileListContainer" class="file-list-container hidden">
+                    <h3>Selected Files (<span id="fileCount">0</span>)</h3>
+                    <div id="fileList" class="file-list"></div>
+
+                    <div class="upload-actions">
+                        <button id="clearAllButton" class="btn btn-secondary">Clear All</button>
+                        <button id="uploadButton" class="btn btn-primary" disabled>
+                            <span>Start Processing</span>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Output Format Selection -->
+                <div id="formatSection" class="format-section hidden">
+                    <h3>Output Formats</h3>
+                    <p class="help-text">Parquet & VCF are recommended and selected by default</p>
+                    <div class="format-options">
+                        <label class="format-option">
+                            <input type="checkbox" name="format" value="parquet" checked>
+                            <div class="format-card">
+                                <div class="format-icon">📦</div>
+                                <div class="format-info">
+                                    <strong>Parquet</strong>
+                                    <span class="format-badge">Recommended</span>
+                                    <p>~720MB • Best for Python/R analysis • Columnar storage</p>
+                                </div>
+                            </div>
+                        </label>
+                        <label class="format-option">
+                            <input type="checkbox" name="format" value="vcf" checked id="vcfFormatCheckbox">
+                            <div class="format-card">
+                                <div class="format-icon">🧬</div>
+                                <div class="format-info">
+                                    <strong>VCF (Gzipped)</strong>
+                                    <span class="format-badge">Standard</span>
+                                    <p>~720MB • Industry standard genomics format</p>
+                                </div>
+                            </div>
+                        </label>
+
+                        <!-- VCF Format Sub-Options -->
+                        <div id="vcfFormatOptions" class="format-suboptions">
+                            <h4>VCF File Organization</h4>
+                            <p class="help-text" style="margin-bottom: 0.75rem;">Choose how chromosomes are organized in your VCF output</p>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="vcf_format" value="merged" checked>
+                                    <div class="radio-card">
+                                        <div class="radio-header">
+                                            <strong>Single Merged File</strong>
+                                            <span class="format-badge">Recommended</span>
+                                        </div>
+                                        <p>All 22 chromosomes in one file (~243MB) • Best for general use</p>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="vcf_format" value="per_chromosome">
+                                    <div class="radio-card">
+                                        <div class="radio-header">
+                                            <strong>Separate Per Chromosome</strong>
+                                        </div>
+                                        <p>22 individual files (chr1.vcf.gz, chr2.vcf.gz, ...) • Better for chromosome-specific analysis</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-box info-blue" style="margin-top: 1rem; font-size: 0.875rem;">
+                        <p style="margin: 0;">
+                            💡 <strong>Tip:</strong> Parquet files work seamlessly with pandas, R, and SQL queries via DuckDB for efficient data analysis.
+                            <a href="https://github.com/captainzonks/Stisty-Server/blob/main/docs/parquet_usage_guide.md" target="_blank" style="color: var(--primary-color); font-weight: 600;">View Parquet usage guide →</a>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processing Section -->
+            <section id="processingSection" class="processing-section hidden">
+                <h2>Processing Your Data</h2>
+
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span id="progressStatus">Uploading files...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <p id="progressDetail" class="progress-detail">Preparing upload...</p>
+                </div>
+
+                <div class="processing-steps">
+                    <div class="processing-step" data-step="upload">
+                        <div class="step-icon">📤</div>
+                        <div class="step-info">
+                            <strong>Uploading Files</strong>
+                            <p>Transferring your data securely...</p>
+                        </div>
+                        <div class="step-status">⏳</div>
+                    </div>
+                    <div class="processing-step" data-step="validate">
+                        <div class="step-icon">✓</div>
+                        <div class="step-info">
+                            <strong>Validating Data</strong>
+                            <p>Checking file formats and integrity...</p>
+                        </div>
+                        <div class="step-status">⏳</div>
+                    </div>
+                    <div class="processing-step" data-step="process">
+                        <div class="step-icon">⚙️</div>
+                        <div class="step-info">
+                            <strong>Processing Chromosomes</strong>
+                            <p>Merging imputation results...</p>
+                        </div>
+                        <div class="step-status">⏳</div>
+                    </div>
+                    <div class="processing-step" data-step="pgs">
+                        <div class="step-icon">📊</div>
+                        <div class="step-info">
+                            <strong>Calculating PGS Scores</strong>
+                            <p>Computing polygenic risk scores...</p>
+                        </div>
+                        <div class="step-status">⏳</div>
+                    </div>
+                    <div class="processing-step" data-step="output">
+                        <div class="step-icon">💾</div>
+                        <div class="step-info">
+                            <strong>Generating Output</strong>
+                            <p>Creating download files...</p>
+                        </div>
+                        <div class="step-status">⏳</div>
+                    </div>
+                </div>
+
+                <div id="uploadWarning" class="info-box info-warning">
+                    <p><strong>⚠️ Keep this page open during upload!</strong></p>
+                    <p style="margin-top: 0.5rem;">Upload will stop if you close your browser. Large files (200MB+) may take 15-45 minutes to upload.</p>
+                </div>
+
+                <div id="processingNote" class="info-box info-blue hidden">
+                    <p><strong>✓ Upload complete!</strong></p>
+                    <p style="margin-top: 0.5rem;">You can now safely close this page. Processing will continue (typically 10-20 min) and you can return anytime to check status.</p>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section hidden">
+                <h2>✅ Processing Complete!</h2>
+
+                <div class="results-summary">
+                    <div class="stat-card">
+                        <h3>Job Completed</h3>
+                        <p id="completionTime" class="stat-value">-</p>
+                        <p class="stat-help">Processing time</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Data Retention</h3>
+                        <p class="stat-value">24 hours</p>
+                        <p class="stat-help">Download expires after <span id="expiryTime">-</span></p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Output Formats</h3>
+                        <p id="formatCount" class="stat-value">-</p>
+                        <p class="stat-help">Files ready for download</p>
+                    </div>
+                </div>
+
+                <div class="info-box info-green" style="margin: 2rem 0;">
+                    <h4>📧 Download Link Emailed</h4>
+                    <p style="margin-top: 0.75rem; margin-bottom: 0;">
+                        We've sent a secure download link with password to <strong id="recipientEmail">your email</strong>.
+                        The link expires in 24 hours and can be used up to 5 times.
+                    </p>
+                    <p style="margin-top: 0.75rem; margin-bottom: 0; font-size: 0.875rem;">
+                        <strong>Didn't receive it?</strong> Check your spam folder or wait a few minutes for delivery.
+                    </p>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="deleteButton" class="btn btn-danger">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete Now
+                    </button>
+                    <button id="newJobButton" class="btn btn-primary">Process Another Dataset</button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="errorSection" class="error-section hidden">
+                <h2>⚠️ Processing Error</h2>
+                <div class="error-message">
+                    <p id="errorText">An error occurred during processing.</p>
+                    <details>
+                        <summary>Error Details</summary>
+                        <pre id="errorDetails"></pre>
+                    </details>
+                </div>
+                <div class="info-box info-blue" style="margin: 1.5rem 0;">
+                    <p style="margin: 0;">
+                        🧹 <strong>Automatic Cleanup:</strong> All uploaded data from this failed job has been automatically deleted from the server.
+                        You may try uploading and processing your files again.
+                    </p>
+                </div>
+                <div class="action-buttons">
+                    <button id="retryButton" class="btn btn-primary">Try Again</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Built with <a href="https://github.com/captainzonks/Stisty" target="_blank">Stisty</a> |
+               <a href="home.html">Home</a> |
+               <a href="https://github.com/captainzonks/Stisty/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a></p>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem;">
+                🔒 Server-side processing with automatic 72-hour deletion |
+                <a href="https://github.com/captainzonks/Stisty-Server" target="_blank">Security Architecture →</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="darkmode.js"></script>
+    <script src="themes.js"></script>
+    <script src="upload.js?v=6"></script>
+    <script src="progress.js?v=6"></script>
+</body>
+</html>

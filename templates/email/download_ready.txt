@@ -1,0 +1,68 @@
+================================================================================
+YOUR GENETIC DATA PROCESSING RESULTS ARE READY
+================================================================================
+
+Your genetic data processing job has completed successfully. Your results are
+ready to download.
+
+JOB INFORMATION
+================================================================================
+Job ID:         {{job_id}}
+Completed:      {{completed_at}}
+Expires:        {{expires_at}}
+
+
+DOWNLOAD CREDENTIALS
+================================================================================
+Use these credentials to download your results. Keep them secure.
+
+Download Password: {{download_password}}
+
+
+DOWNLOAD YOUR RESULTS
+================================================================================
+Visit the following URL to download your results:
+
+{{download_url}}
+
+Enter the password above when prompted to access your data.
+
+
+DOWNLOAD INSTRUCTIONS
+================================================================================
+1. Visit the download URL above
+2. Enter the download password when prompted
+3. Your results will be downloaded as a ZIP file
+4. Extract the ZIP to access your processed genetic data
+
+
+IMPORTANT SECURITY INFORMATION
+================================================================================
+⚠️ Please read carefully:
+
+- This download link will expire in 24 HOURS
+- You have 5 ATTEMPTS to enter the correct password
+- Do NOT share this email or password with anyone
+- After downloading, DELETE this email for security
+- Your data will be automatically DELETED from our servers after expiration
+
+
+WHAT'S INCLUDED IN YOUR DOWNLOAD
+================================================================================
+📦 Your results ZIP file contains:
+
+- Parquet file: Compressed genetic data (use Python/R/Julia)
+- VCF.gz file: Standard genomic variant format
+- SQLite database: Queryable genetic database
+- Processing summary: Job metadata and statistics
+
+
+QUESTIONS OR ISSUES?
+================================================================================
+If you experience any problems downloading your results, please contact
+support.
+
+================================================================================
+This is an automated message from GeneGnome Genetics Processing.
+Please do not reply to this email.
+================================================================================

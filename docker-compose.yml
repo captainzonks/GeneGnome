@@ -1,0 +1,570 @@
+# ==============================================================================
+# docker-compose.yml - GeneGnome Genetics Data Processing Stack
+# ==============================================================================
+# Description: Secure genetic data processing service with defense-in-depth
+# Author: Matt Barham
+# Created: 2025-10-31
+# Modified: 2026-01-17
+# Version: 1.3.0
+# Repository: https://github.com/captainzonks/GeneGnome
+# ==============================================================================
+#
+# Security Architecture:
+#   - Isolated network (no internet access for processor)
+#   - Encrypted volumes (LUKS AES-256)
+#   - Row-level database security
+#   - Container hardening (read-only root, seccomp, AppArmor)
+#   - Comprehensive audit logging
+#   - Automatic data deletion (24-hour retention)
+#
+# Container Versions:
+#   - genetics-frontend: 1.0.0 (Nginx static file server with VCF generator)
+#   - genetics-api-gateway: 1.0.0 (custom Rust/Axum application)
+#   - genetics-worker: 1.0.0 (custom Rust background processor)
+#   - postgres18-genetics: 18.1-custom (production database)
+#   - genetics-redis: 8.4.0-alpine
+#
+# Documentation:
+#   - Security Architecture: /docs/genetic_data_security_architecture.md
+#   - API Documentation: TBD
+#   - User Guide: TBD
+#
+# Networks:
+#   - proxy: External network for reverse proxy routing (Traefik, nginx, etc.)
+#   - genetics_isolated: Internal-only processing network (no external access)
+#   - genetics_db_network: Database network
+#
+# Volumes:
+#   - genetics_encrypted: LUKS-encrypted data storage
+#   - genetics_redis_data: Redis cache
+#
+# Dependencies:
+#   - Traefik (reverse proxy, TLS termination)
+#   - Authentik (authentication, 2FA)
+#   - PostgreSQL (metadata storage)
+#   - Redis (job queue, rate limiting)
+#
+# External Integrations:
+#   - [x] Traefik forward auth middleware configured
+#   - [x] Authentik application created (genetics-api with 2FA + genetics-users group)
+#   - [ ] DNS records configured for your domain (e.g., genetics.your-domain.com)
+#   - [x] LUKS encrypted volume mounted at /mnt/genetics-encrypted
+#   - [ ] Monitoring configured (Prometheus/Grafana)
+#
+# ==============================================================================
+
+name: genetics
+
+# ==============================================================================
+# EXTENSIONS
+# ==============================================================================
+
+x-ssl: &ssl
+  environment:
+    - SSL_CERT_FILE=${SSL_CERT_FILE}
+    - REQUESTS_CA_BUNDLE=${REQUESTS_CA_BUNDLE}
+    - CURL_CA_BUNDLE=${CURL_CA_BUNDLE}
+
+  volumes:
+    - ${CA_CERT}:/etc/ssl/certs/ca-certificates.crt:ro
+
+x-logging-important: &log
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+x-logging-small: &log_small
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+
+networks:
+  # External network for reverse proxy routing
+  # Change 'proxy' to match your existing proxy network name (e.g., 'traefik', 'nginx-proxy')
+  # Or remove 'external: true' and let Docker create it if you don't have an existing proxy network
+  proxy:
+    external: true
+
+  # Isolated network for genetics processor (NO external access)
+  genetics_isolated:
+    driver: bridge
+    internal: true  # Cannot reach external networks
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+  # Database network (internal only)
+  genetics_db_network:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+
+volumes:
+  genetics_postgres_data:
+    driver: local
+  genetics_redis_data:
+    driver: local
+
+# ==============================================================================
+# SECRETS
+# ==============================================================================
+
+secrets:
+  genetics_db_password:
+    file: ${DOCKERDIR}/secrets/genetics/genetics_psql_password
+  genetics_api_key:
+    file: ${DOCKERDIR}/secrets/genetics/genetics_api_key
+  genetics_jwt_secret:
+    file: ${DOCKERDIR}/secrets/genetics/genetics_jwt_secret
+  proton_bridge_password:
+    file: ${DOCKERDIR}/secrets/proton/proton_bridge_password
+
+# ==============================================================================
+# SERVICES
+# ==============================================================================
+
+services:
+  #==============================================================================
+  # POSTGRES18-GENETICS - PostgreSQL 18.1 
+  #==============================================================================
+  # Metadata storage for genetics processing pipeline
+  # - Job tracking and status
+  # - File metadata and checksums
+  # - Audit logs (append-only, row-level security)
+  # - Uses PostgreSQL 18.1 with host path mapping for backups
+  # - Matches postgres18-core design pattern
+  postgres18-genetics:
+    <<: [*ssl, *log]
+    image: ${HOSTNAME_L}/postgres:${POSTGRES18_GENETICS_VERSION}
+    build:
+      context: ${GENEGNOME_DIR}/dockerfiles/postgres18/
+      dockerfile: ${GENEGNOME_DIR}/dockerfiles/postgres18/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE}
+        CT_TAG: ${POSTGRES18_GENETICS_VERSION}
+        USER_ID: ${PUID}
+        GROUP_ID: ${DGID}
+        USERNAME: postgres
+        GROUPNAME: postgres
+        OG_UID: 999
+        OG_GID: 999
+      x-bake:
+        tags:
+          - postgres18-genetics:${POSTGRES18_GENETICS_VERSION}
+        cache-from:
+          - ${USERNAME}/postgres18-genetics:cache
+          - type=local,src=${GENEGNOME_DIR}/build/cache/
+        cache-to:
+          - type=local,dest=${GENEGNOME_DIR}/build/cache/
+
+    container_name: postgres18-genetics
+    hostname: postgres18-genetics
+    restart: unless-stopped
+    profiles: ["genetics", "all"]
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2G
+    cpus: 2.0
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - FOWNER
+    user: 1000:968
+
+    networks:
+      genetics_db_network:
+      proxy:
+        ipv4_address: ${POSTGRES18_GENETICS_IP}
+
+    ports:
+      - ${POSTGRES18_GENETICS_PORT}:5432
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+
+    environment:
+      - TZ=${TZ}
+      - DOMAIN=${DOMAIN}
+      - POSTGRES_IP=${POSTGRES18_GENETICS_IP}
+      - POSTGRES_PORT=${POSTGRES18_GENETICS_PORT}
+      - POSTGRES_DB=${POSTGRES18_GENETICS_DB}
+      - POSTGRES_USER=${POSTGRES18_GENETICS_USER}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/genetics_db_password
+
+    volumes:
+      - /mnt/genetics-encrypted/postgres18-genetics/tablespaces/:/data/tablespaces/:rw
+      - /mnt/genetics-encrypted/postgres18-genetics/:/var/lib/postgresql/:rw
+      - ${LOCALTIME}:/etc/localtime:ro
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    tmpfs:
+      - /tmp/:rw,size=500m
+      - /dev/shm/:rw,size=1g
+
+    secrets:
+      - genetics_db_password
+
+  # ============================================================================
+  # REDIS CACHE/QUEUE
+  # ============================================================================
+  genetics-redis:
+    <<: [*ssl, *log]
+    image: redis:${REDIS_VERSION}
+    container_name: genetics-redis
+    hostname: genetics-redis
+
+    restart: unless-stopped
+    profiles: ["genetics", "all"]
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+    networks:
+      genetics_isolated:
+      proxy:  # Added for localhost port access
+
+    ports:
+      - ${GENETICS_REDIS_PORT}:6379
+
+    volumes:
+      - genetics_redis_data:/data
+
+    command:
+      - redis-server
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --appendonly
+      - "no"
+      - --save
+      - ""
+      - --stop-writes-on-bgsave-error
+      - "no"  # Don't block writes if RDB save fails
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # API GATEWAY (Axum web server)
+  # ============================================================================
+  genetics-api-gateway:
+    <<: [*ssl, *log]
+    image: ${HOSTNAME_L}/genetics-api-gateway:${GENETICS_API_VERSION}
+    build:
+      context: ${GENEGNOME_DIR}/stacks/genetics/
+      dockerfile: ${GENEGNOME_DIR}/stacks/genetics/api-gateway/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE}
+      x-bake:
+        tags:
+          - genetics-api-gateway:${GENETICS_API_VERSION}
+        cache-from:
+          - ${USERNAME}/genetics-api-gateway:cache
+          - type=local,src=${GENEGNOME_DIR}/build/cache/
+        cache-to:
+          - type=local,dest=${GENEGNOME_DIR}/build/cache/
+
+    container_name: genetics-api-gateway
+    hostname: genetics-api-gateway
+
+    restart: unless-stopped
+    profiles: ["genetics", "all"]
+
+    # Run as dedicated non-root user
+    user: "3000:3000"
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+    # Networks
+    networks:
+      proxy:
+        ipv4_address: ${GENETICS_API_IP}
+      genetics_db_network:
+      genetics_isolated:
+
+    # Volumes
+    volumes:
+      - /mnt/genetics-encrypted:/mnt/genetics-encrypted:rw
+      - ${DOCKERDIR}/stacks/genetics/templates:/app/templates:ro
+
+    # Environment
+    environment:
+      - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES18_GENETICS_USER}:${POSTGRES_GENETICS_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
+      - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
+      - ENCRYPTED_VOLUME_PATH=/mnt/genetics-encrypted
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD_FILE=/run/secrets/proton_bridge_password
+      - SMTP_USE_TLS=${SMTP_USE_TLS}
+      - SMTP_USE_SSL=${SMTP_USE_SSL}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - GENETICS_DOWNLOAD_BASE_URL=${GENETICS_DOWNLOAD_BASE_URL}
+      - GENETICS_EMAIL_TEMPLATE_DIR=${GENETICS_EMAIL_TEMPLATE_DIR}
+
+    # Secrets
+    secrets:
+      - genetics_db_password
+      - genetics_api_key
+      - proton_bridge_password
+
+    # Port exposure
+    ports:
+      - ${GENETICS_API_EXTERNAL_PORT}:${GENETICS_API_PORT}
+
+    # Dependencies
+    depends_on:
+      postgres18-genetics:
+        condition: service_healthy
+      genetics-redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/api/genetics/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+
+  # ============================================================================
+  # GENETICS WORKER (Background job processor)
+  # ============================================================================
+  genetics-worker:
+    <<: [*ssl, *log]
+    image: ${HOSTNAME_L}/genetics-worker:${GENETICS_WORKER_VERSION}
+    build:
+      context: ${GENEGNOME_DIR}/stacks/genetics/
+      dockerfile: ${GENEGNOME_DIR}/stacks/genetics/worker/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE}
+      x-bake:
+        tags:
+          - genetics-worker:${GENETICS_WORKER_VERSION}
+        cache-from:
+          - ${USERNAME}/genetics-worker:cache
+          - type=local,src=${GENEGNOME_DIR}/build/cache/
+        cache-to:
+          - type=local,dest=${GENEGNOME_DIR}/build/cache/
+
+    container_name: genetics-worker
+    hostname: genetics-worker
+    restart: unless-stopped
+    profiles: ["genetics", "all"]
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "3000:3000"
+    group_add:
+      - "968"  # docker group for accessing proton bridge secrets
+
+    # Resource limits (increased for multi-sample processing: 5.9M variants × 51 samples)
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '4.0'
+        reservations:
+          memory: 10G
+          cpus: '2.0'
+
+    # Networks (proxy network for SMTP access if using external mail bridge)
+    networks:
+      - genetics_isolated
+      - genetics_db_network
+      - proxy
+
+    depends_on:
+      postgres18-genetics:
+        condition: service_healthy
+      genetics-redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "genetics-worker"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+    environment:
+      - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES18_GENETICS_USER}:${POSTGRES_GENETICS_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
+      - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
+      - ENCRYPTED_VOLUME_PATH=/mnt/genetics-encrypted
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD_FILE=/run/secrets/proton_bridge_password
+      - SMTP_USE_TLS=${SMTP_USE_TLS}
+      - SMTP_USE_SSL=${SMTP_USE_SSL}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - GENETICS_DOWNLOAD_BASE_URL=${GENETICS_DOWNLOAD_BASE_URL}
+      - GENETICS_EMAIL_TEMPLATE_DIR=${GENETICS_EMAIL_TEMPLATE_DIR}
+
+    volumes:
+      - /mnt/genetics-encrypted:/mnt/genetics-encrypted:rw
+      - ${DOCKERDIR}/stacks/genetics/templates:/app/templates:ro
+
+    secrets:
+      - genetics_db_password
+      - proton_bridge_password
+
+  # ============================================================================
+  # GENETICS FRONTEND - Job Submission UI
+  # ============================================================================
+  genetics-frontend:
+    <<: [*ssl, *log_small]
+    image: ${HOSTNAME_L}/genetics-frontend:${GENETICS_FRONTEND_VERSION}
+    build:
+      context: ${GENEGNOME_DIR}/stacks/genetics/frontend/
+      dockerfile: ${GENEGNOME_DIR}/stacks/genetics/frontend/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE}
+        USER_ID: 3000
+        GROUP_ID: 3000
+      x-bake:
+        tags:
+          - genetics-frontend:${GENETICS_FRONTEND_VERSION}
+        cache-from:
+          - ${USERNAME}/genetics-frontend:cache
+          - type=local,src=${GENEGNOME_DIR}/build/cache/
+        cache-to:
+          - type=local,dest=${GENEGNOME_DIR}/build/cache/
+    container_name: genetics-frontend
+    hostname: genetics-frontend
+    restart: unless-stopped
+    profiles: ["genetics", "all"]
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "3000:3000"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+    networks:
+      proxy:
+        ipv4_address: ${GENETICS_FRONTEND_IP}
+
+    expose:
+      - 80
+
+    depends_on:
+      genetics-api-gateway:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    environment:
+      - TZ=${TZ}
+
+    volumes:
+      - ${LOCALTIME}:/etc/localtime:ro
+
+    tmpfs:
+      - /tmp:rw,size=10m
+      - /run:rw,size=5m
+
+# ==============================================================================
+# SETUP NOTES
+# ==============================================================================
+#
+# PREREQUISITES:
+#   1. Create encrypted volume: /mnt/genetics-encrypted (LUKS2 AES-256-XTS recommended)
+#   2. Generate secrets in ${DOCKERDIR}/secrets/genetics/:
+#       - genetics_psql_password
+#       - genetics_api_key
+#       - genetics_jwt_secret
+#   3. Create system user: genetics (UID/GID 3000)
+#   4. Configure reverse proxy (Traefik, nginx, etc.) with routes to this stack
+#   5. Set up authentication if desired (Authentik, Authelia, etc.)
+#
+# DEPLOYMENT CHECKLIST:
+#   [ ] Encrypted volume mounted at /mnt/genetics-encrypted
+#   [ ] PostgreSQL running with initialized schema
+#   [ ] Redis running
+#   [ ] API Gateway image built (genetics-api-gateway:1.0.0)
+#   [ ] Worker image built (genetics-worker:1.0.0)
+#   [ ] Frontend image built (genetics-frontend:1.0.0)
+#   [ ] Reverse proxy configured with routes
+#   [ ] DNS records configured
+#   [ ] SMTP configured for email notifications
+#   [ ] Reference panel downloaded (VCF.Files3.RData)
+#   [ ] Monitoring configured (Prometheus/Grafana - optional)
+#   [ ] Security audit completed
+#
+# ==============================================================================

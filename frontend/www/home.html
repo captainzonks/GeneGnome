@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeneGnome - The All-In-One DNA Deep Digger</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+  <link rel="manifest" href="images/favicon/site.webmanifest">
+  <link rel="stylesheet" href="style.css?v=20251121">
+  <link rel="stylesheet" href="home.css?v=20251121">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <div class="header-content">
+        <div class="header-text">
+          <div class="header-title-row">
+            <div class="header-logo">
+              <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+              <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+            </div>
+            <h1>GeneGnome</h1>
+          </div>
+          <p class="subtitle">The All-In-One DNA Deep Digger</p>
+        </div>
+        <div class="theme-controls">
+          <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+            <span class="icon-sun">☀️</span>
+            <span class="icon-moon">🌙</span>
+          </button>
+          <div class="theme-selector-dropdown">
+            <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+              🎨 Theme
+            </button>
+            <div id="themeSelectorMenu" class="theme-selector-menu">
+              <div class="theme-selector-option active" data-theme="earth">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                  <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                </div>
+                <span class="theme-selector-label">Earth</span>
+              </div>
+              <div class="theme-selector-option" data-theme="medical">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                  <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                  <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                </div>
+                <span class="theme-selector-label">Medical</span>
+              </div>
+              <div class="theme-selector-option" data-theme="sunshine">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                  <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                </div>
+                <span class="theme-selector-label">Sunshine</span>
+              </div>
+              <div class="theme-selector-option" data-theme="spring">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                  <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                </div>
+                <span class="theme-selector-label">Spring</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <div class="hero-content">
+          <h2>Your DNA, Your Data, Your Control</h2>
+          <p>Process, analyze, and visualize your genomic data with professional-grade tools. All processing happens on
+            our secure server with automatic cleanup.</p>
+          <div class="hero-stats">
+            <div class="stat">
+              <strong>51</strong>
+              <span>Multi-sample analysis</span>
+            </div>
+            <div class="stat">
+              <strong>22</strong>
+              <span>Autosomes processed</span>
+            </div>
+            <div class="stat">
+              <strong>~31M</strong>
+              <span>Variants analyzed</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div
+        style="text-align: center; padding: 0.75rem; margin-bottom: 1.5rem; background: var(--card-bg); border-radius: 0.5rem;">
+        <p style="margin: 0; font-size: 0.9rem;">
+          Learn about genetics with our <a href="results-example.html"
+            style="color: var(--primary-color); font-weight: 600;">Example Results Report! ⇨</a>
+        </p>
+      </div>
+
+      <!-- Features Grid -->
+      <section class="features-section">
+        <h2>What Can You Do?</h2>
+        <div class="features-grid">
+          <!-- VCF Generator Card -->
+          <div class="feature-card feature-available">
+            <div class="feature-header">
+              <div class="feature-icon">📄</div>
+              <div class="feature-status">
+                <span class="badge badge-ready">Ready</span>
+              </div>
+            </div>
+            <h3>VCF Generator</h3>
+            <p class="feature-description">Convert your 23andMe raw data to VCF format for imputation servers. Fast,
+              client-side processing - your data never leaves your browser.</p>
+            <ul class="feature-list">
+              <li>✓ Client-side conversion (secure)</li>
+              <li>✓ Michigan/TOPMed compatible</li>
+              <li>✓ Build 37 & 38 support</li>
+              <li>✓ Instant processing</li>
+            </ul>
+            <a href="vcf-generator.html" class="btn btn-primary">Generate VCF</a>
+          </div>
+
+          <!-- Genetics Processor Card -->
+          <div class="feature-card feature-available">
+            <div class="feature-header">
+              <div class="feature-icon">⚙️</div>
+              <div class="feature-status">
+                <span class="badge badge-ready">Ready</span>
+              </div>
+            </div>
+            <h3>Genetics Processor</h3>
+            <p class="feature-description">Merge imputed VCF files with original 23andMe data. Server-side processing
+              with 51-sample multi-sample analysis (50 reference + you).</p>
+            <ul class="feature-list">
+              <li>✓ Server-side processing</li>
+              <li>✓ Multi-sample analysis (51 samples)</li>
+              <li>✓ Parquet & VCF output</li>
+              <li>✓ Quality filtering (R² ≥ 0.9)</li>
+            </ul>
+            <a href="process.html" class="btn btn-primary">Process Data</a>
+          </div>
+
+          <!-- Dashboard Card -->
+          <div class="feature-card feature-planned">
+            <div class="feature-header">
+              <div class="feature-icon">📊</div>
+              <div class="feature-status">
+                <span class="badge badge-planned">Coming Soon</span>
+              </div>
+            </div>
+            <h3>Job Dashboard</h3>
+            <p class="feature-description">Track your processing jobs, view history, and manage results. Monitor
+              progress in real-time and access past analyses.</p>
+            <ul class="feature-list">
+              <li>⏳ Job history & status</li>
+              <li>⏳ Real-time progress tracking</li>
+              <li>⏳ Download management</li>
+              <li>⏳ Usage statistics</li>
+            </ul>
+            <button class="btn btn-secondary" disabled>Coming Soon</button>
+          </div>
+
+          <!-- Visualization Card -->
+          <div class="feature-card feature-planned">
+            <div class="feature-header">
+              <div class="feature-icon">📈</div>
+              <div class="feature-status">
+                <span class="badge badge-planned">Coming Soon</span>
+              </div>
+            </div>
+            <h3>Data Visualization</h3>
+            <p class="feature-description">Interactive genomic data visualization. Explore your variants, view quality
+              metrics, and generate publication-ready plots.</p>
+            <ul class="feature-list">
+              <li>⏳ Chromosome coverage heatmaps</li>
+              <li>⏳ Allele frequency distributions</li>
+              <li>⏳ Quality metrics (R² plots)</li>
+              <li>⏳ Export to PNG/SVG</li>
+            </ul>
+            <button class="btn btn-secondary" disabled>Coming Soon</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- How It Works -->
+      <section class="how-it-works">
+        <h2>How It Works</h2>
+        <div class="workflow-steps">
+          <div class="workflow-step">
+            <div class="step-number">1</div>
+            <h3>Generate VCF</h3>
+            <p>Convert your 23andMe data to VCF format for imputation</p>
+          </div>
+          <div class="workflow-arrow">→</div>
+          <div class="workflow-step">
+            <div class="step-number">2</div>
+            <h3>Impute Data</h3>
+            <p>Use Michigan Imputation Server or TOPMed for genotype imputation</p>
+          </div>
+          <div class="workflow-arrow">→</div>
+          <div class="workflow-step">
+            <div class="step-number">3</div>
+            <h3>Process Results</h3>
+            <p>Merge imputed results with original data for comprehensive analysis</p>
+          </div>
+          <div class="workflow-arrow">→</div>
+          <div class="workflow-step">
+            <div class="step-number">4</div>
+            <h3>Visualize & Export</h3>
+            <p>Explore your data with interactive tools and export in multiple formats</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Privacy & Security -->
+      <section class="privacy-section">
+        <h2>Privacy & Security</h2>
+        <div class="privacy-grid">
+          <div class="privacy-card">
+            <div class="privacy-icon">🔒</div>
+            <h3>Encrypted Storage</h3>
+            <p>All server-side data is stored on encrypted volumes during processing</p>
+          </div>
+          <div class="privacy-card">
+            <div class="privacy-icon">🗑️</div>
+            <h3>Automatic Deletion</h3>
+            <p>Results expire after 24 hours and are permanently deleted</p>
+          </div>
+          <div class="privacy-card">
+            <div class="privacy-icon">🚫</div>
+            <h3>No Data Retention</h3>
+            <p>We don't keep copies of your genomic data after expiration</p>
+          </div>
+          <div class="privacy-card">
+            <div class="privacy-icon">🔐</div>
+            <h3>Secure Downloads</h3>
+            <p>Password-protected downloads with limited access attempts</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick Start -->
+      <section class="quickstart-section">
+        <h2>Ready to Get Started?</h2>
+        <div class="quickstart-content">
+          <div class="quickstart-text">
+            <p>Have imputed results from Michigan Imputation Server or TOPMed? Jump straight to the Genetics Processor
+              to merge and analyze your data.</p>
+            <p>Get comprehensive analysis with multi-sample comparison, quality filtering, and export to multiple
+              formats.</p>
+          </div>
+          <div class="quickstart-actions">
+            <a href="process.html" class="btn btn-primary btn-large">Start Processing</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Built with <a href="https://github.com/captainzonks/Stisty" target="_blank">Stisty</a> |
+        <a href="https://github.com/captainzonks/Stisty/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a>
+      </p>
+      <p style="margin-top: 0.5rem; font-size: 0.875rem;">
+        🔒 Server-side processing with automatic 24-hour deletion |
+        <a href="https://github.com/captainzonks/Stisty-Server" target="_blank">Security Architecture →</a>
+      </p>
+    </footer>
+  </div>
+
+  <script src="darkmode.js"></script>
+  <script src="themes.js"></script>
+</body>
+
+</html>

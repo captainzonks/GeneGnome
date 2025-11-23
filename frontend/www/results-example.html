@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Educational Attainment Results - GeneGnome</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+  <link rel="manifest" href="images/favicon/site.webmanifest">
+  <link rel="stylesheet" href="style.css?v=20251202_10">
+  <link rel="stylesheet" href="results-example.css?v=20251202_10">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <div class="header-content">
+        <div class="header-text">
+          <div class="header-title-row">
+            <div class="header-logo">
+              <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+              <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+            </div>
+            <h1>GeneGnome</h1>
+          </div>
+          <p class="subtitle">An Example Report for Genetic Results</p>
+          <p class="example-notice">Trait: <i>Educational Attainment</i> (<b>PGS002012</b>)</p>
+          <nav class="header-nav">
+            <a href="home.html">⇦ Back to Home</a>
+          </nav>
+        </div>
+        <div class="theme-controls">
+          <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+            <span class="icon-sun">☀️</span>
+            <span class="icon-moon">🌙</span>
+          </button>
+          <div class="theme-selector-dropdown">
+            <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+              🎨 Theme
+            </button>
+            <div id="themeSelectorMenu" class="theme-selector-menu">
+              <div class="theme-selector-option active" data-theme="earth">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                  <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                </div>
+                <span class="theme-selector-label">Earth</span>
+              </div>
+              <div class="theme-selector-option" data-theme="medical">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                  <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                  <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                </div>
+                <span class="theme-selector-label">Medical</span>
+              </div>
+              <div class="theme-selector-option" data-theme="sunshine">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                  <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                </div>
+                <span class="theme-selector-label">Sunshine</span>
+              </div>
+              <div class="theme-selector-option" data-theme="spring">
+                <div class="theme-color-preview">
+                  <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                  <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                  <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                </div>
+                <span class="theme-selector-label">Spring</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Customer Profile -->
+    <div class="customer-profile">
+      <h3>This is an example report prepared for an individual with the following profile:</h3>
+      <div class="profile-details">
+        <p><strong>Age:</strong> 19</p>
+        <p><strong>Sex:</strong> Female</p>
+        <p><strong>Ancestry:</strong> South Asian</p>
+        <p><strong>Sample Date:</strong> December 2024</p>
+      </div>
+      <p class="profile-note">This report uses ancestry-matched reference data for improved accuracy.</p>
+    </div>
+
+    <main>
+      <!-- SECTION 1: Your Score At-a-Glance (PUBLIC FACING) -->
+      <section class="results-hero">
+        <h2>Educational Attainment</h2>
+        <p class="customer-greeting">Based on your genetic data and South Asian ancestry</p>
+
+        <div class="score-display">
+          <div class="score-value">
+            <div class="score-number">3.5</div>
+            <div class="score-label">PGS</div>
+          </div>
+
+          <div class="percentile-value">
+            <div class="percentile-number">99.98<span class="percentile-suffix">th</span></div>
+            <div class="percentile-label">Percentile</div>
+          </div>
+        </div>
+
+        <!-- CONTENT: Introduction of the content and what's to come -->
+        <div class="score-explanation">
+          <p>If you're new to the world of genetics, you may see some terminology with which you're
+            unfamiliar. You
+            might have questions, like what is a <b>PGS</b>? What is a <b>z-score</b>? What is a <b>standard
+              deviation</b>? How does any of this have anything to do with me?</p>
+          <br>
+          <p>The learning curve of how all of this connects to you doesn't have to be steep. We'll walk you
+            through the
+            basics, and by the end you'll have a starting foundation in what your genetics results mean for you and how
+            they play into the big picture of your life.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 2: DNA Fundamentals -->
+      <section class="genetics-basics">
+        <h2>🧬 DNA Fundamentals</h2>
+
+        <!-- CONTENT: Introduction to DNA basics -->
+        <div class="section-intro">
+          <p>For the most part, we've all heard of <b>DNA</b>; but often that's where it ends. We're told
+            it's a blueprint for who we are, how our body knows what to do and how to grow and develop, but how it all
+            works is left as a bit of a mystery. Before we can understand your polygenic score, let's start with the
+            building blocks of genetics itself.
+          </p><br>
+        </div>
+
+        <div class="concept-cards">
+          <!-- Card 1: What is DNA? -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>What is DNA?</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              WHAT IS DNA?
+                   ======================================================================== -->
+              <div class="content-with-image">
+                <div class="content-text">
+                  <p>At some point in your life you probably saw the recognizable shape of the double
+                    helix:
+                    two twisting parallel lines with climbing rungs between them, like a ladder. Life relies on this
+                    macromolecule and the instructions it contains. Nearly all cells have DNA, and with it, they produce
+                    the
+                    proteins required for the whole biological machine to function.</p><br>
+                  <p align="center">⭐ <b>DNA</b> stands for <b>deoxyribonucleic acid</b></p>
+                </div>
+                <div class="content-image">
+                  <img src="/images/dna/dna_animation.gif?v=20251201" alt="DNA Double Helix Animation" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Nucleotides & Base Pairs -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>The Building Blocks: Nucleotides & Base Pairs</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <div class="content-with-image">
+                <!-- ========================================================================
+                  NUCLEOTIDES & BASE PAIRS
+                   ======================================================================== -->
+                <div class="content-text">
+                  <p>DNA is actually beautifully simple, in a sense. Those twisting sides of the ladder—the
+                    <b>backbones</b>—are alternating molecules of <b>phosphate</b> and <b>sugar groups</b>, called
+                    <b>deoxyribose</b>. Each phosphate and sugar group has one of four <b>nucleobases</b> attached to
+                    it: <b>cytosine (C)</b>, <b>guanine (G)</b>, <b>adenine (A)</b> or <b>thymine (T)</b>. A phosphate,
+                    sugar and nucleobase, all together, is called a <b>nucleotide</b>.
+                  </p><br>
+                </div>
+
+                <div class="content-image">
+                  <img src="/images/dna/base_pairs.webp?v=20251201"
+                    alt="Guanine and cytosine, adenine and thymine base pair image" />
+                </div>
+              </div>
+
+              <div class="content-text">
+                <p>Series of nucleotides form a long chain together—and this
+                  chain meets up with a complementary partner chain but running in the opposite direction (We call
+                  this
+                  <b>antiparallel</b>.). It’s sort of like a million ships passing in the night—or perhaps two soccer
+                  teams of kids lined up with their hands out to “side-five” congratulate each other after a game.
+                  Except in this scenario they’re holding hands and won’t let go without a third party breaking
+                  everyone
+                  up.
+                </p><br>
+              </div>
+
+              <div class="content-with-image">
+
+                <div class="content-image">
+                  <img src="/images/dna/dna_simplified_diagram.jpg?v=20251201_04" alt="Simplified DNA diagram image" />
+                </div>
+
+                <div class="content-text">
+                  <p>Each nucleotide's chemical properties forces them to only link up with a specific
+                    other nucleotide. This is where the simple beauty starts to occur (we think). There are two
+                    categories:
+                    <b>pyramidines</b> and <b>purines</b>. The pyramidines are cytosine (C) and thymine (T), and the
+                    purines are guanine (G) and adenine (A). Cytosine always links up with guanine (<b>C-G</b> or
+                    <b>G-C</b>) and thymine always links up with adenine (<b>T-A</b> or <b>A-T</b>). Two nucleotides
+                    make a <b>base pair (bp)</b>—and these base pairs are what lead to variations in the <b>genome</b>
+                    that create diversity and distinctiveness among populations and individuals.
+                  </p><br>
+                  <p align="center">⭐ A <b>genome</b> is all of your genetic code. Every last one of the approximate
+                    <i>3
+                      billion</i> base pairs that make up the human genome.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: What Are SNPs? -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>What Are SNPs (Single Nucleotide Polymorphisms)?</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              WHAT ARE SNPs?
+                   ======================================================================== -->
+              <div class="content-with-image">
+                <div class="content-text">
+                  <p>This is the whole reason you’re here. You’re interested in what makes you you, and the
+                    way
+                    that happens is through variations in the theme: <b>single-nucleotide polymorphisms</b>, or
+                    </b>SNPs</b>
+                    (pronounced snips). Less specifically, <b>single-nucleotide variations</b>, or <b>SNVs</b> (No one
+                    knows
+                    how to pronounce SNVs, but <b>sneevies</b> has been the scuttlebutt lately.), but we prune down to
+                    only
+                    the variants that occur in greater than 1% of the population—and those are the SNPs. We consider any
+                    variation with a frequency less than that to be rare, and current methodology don’t support them.
+                  </p>
+                  <br>
+                </div>
+
+                <div class="content-image content-image-large">
+                  <img src="/images/dna/dna_snp.jpg?v=20251202" alt="SNP image" />
+                </div>
+
+              </div>
+
+              <p>Sometimes a nucleotide gets swapped out, kicked out, introduced to a new neighbor or even
+                itself, and when that happens we get a <b>variant</b>. If we’re referring to a single variant at a
+                precise location (or <b>locus</b>), then we call it an <b>allele</b>. So, if a specific nucleotide is
+                expected to be thymine based on a <b>reference</b> (think of it like an average human's genetics), but
+                it is instead found to be cytosine, we would refer to both T and C as the possible alleles for that SNP.
+              </p><br>
+
+              <p align="center">⭐ There are <i>millions</i> of SNPs in every person, but most don’t result in any
+                observable changes!</p><br>
+            </div>
+          </div>
+
+          <!-- Card 4: Genetic Variants - How We Differ -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>Genetic Variants: How We All Differ</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              GENETIC VARIANTS
+                   ======================================================================== -->
+              <p>We’ve identified more than <i>600 million</i> SNPs in the human genome, and that’s for the whole,
+                global
+                population. That’s the reference genome, though, or that "average human" aforementioned. For an
+                individual’s personal genome, typically it differs at
+                only 4 to 5 million <b>loci</b> (plural of <b>locus</b>), and the vast majority of those are SNPs;
+                though, they also include <b>indels</b>—or <b>insertion-deletions</b>—which belong to the larger family
+                of <b>structural variations</b>, along with <b>duplications</b>, <b>inversions</b>,
+                <b>translocations</b> and more. These involve longer sequences, now expanded to include greater than 50
+                base pairs (Alkan et al., 2011).
+              </p><br>
+
+              <div class="content-with-image">
+                <div class="content-text">
+                  <p>While there are variants that lead to birth defects, diseases and disorders (like Huntington’s
+                    disease,
+                    cystic fibrosis or Down’s syndrome), many are harmless and contribute to the attributes we see
+                    around us
+                    and make humans diverse creatures. Height, eye color, youthfulness of skin as we age and, as you’ve
+                    discovered, educational attainment are all associated with genetic variants.</p><br><br>
+                  <p align="center">⭐ "All human behavioral traits are heritable."</p><br>
+                  <p align="right">Turkheimer, E. (2000). Three laws of behavior genetics and what they mean. <i>Current
+                      directions in psychological science, 9</i>(5), 160-164.</p><br>
+                  <br>
+                </div>
+                <div class="content-image content-image-large">
+                  <img src="/images/stock/fruit_variety.jpg?v=20251202" alt="Fruit varieties image" />
+                  <div class="content-image-credit">
+                    <p> Photo by <a
+                        href="https://unsplash.com/@josefin?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Josefin</a>
+                      on <a
+                        href="https://unsplash.com/photos/assorted-fruits-on-display-DJWa4FWXDG4?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Unsplash</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: From DNA to Traits (Bridge Concept) -->
+      <section class="genetics-basics">
+        <h2>🔗 From DNA to Observable Traits</h2>
+
+        <div class="section-intro">
+          <p>Now that you understand the basic structure of DNA and genetic variants, let's connect the
+            dots
+            between those tiny molecular differences and the traits we can actually observe and measure—like your
+            educational attainment.</p><br>
+        </div>
+
+        <div class="concept-cards">
+          <!-- Card 1: Heritability -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>Heritability</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              HERITABILITY
+                   ======================================================================== -->
+              <p>We’ve gone long enough without bringing up a term that is often misunderstood and—as a result—misused.
+                That word is <b>heritability</b>.</p><br>
+
+              <p>If you haven’t heard of heritability before, you might immediately jump to another word:
+                inheritability. These are not the same word, and they mean <i>very</i> different things.</p><br>
+
+              <p align="center">“Heritability is a concept that summarizes how much of the variation in a trait is due
+                to variation in genetic factors” (Wray & Visscher, 2008).</p><br>
+
+              <p>That is to say, it’s the <i>proportion</i> of a trait—like your educational attainment—observed within
+                a
+                population that can be explained by changes in the genome alone. It is <i>not</i> the chance the trait
+                might be
+                inherited. This is very important, because it allows for the <b>environment</b> to be a variable. The
+                days of
+                arguing over whether it’s nature or nurture that makes us all wonderful or terrible people. It’s
+                <i>both</i>.
+              </p><br>
+
+              <div class="content-with-image">
+                <div class="content-image">
+                  <img src="/images/stock/pie_slice.jpg?v=20251202" alt="A sliced pie image" />
+                  <div class="content-image-credit">
+                    <p>Photo by <a
+                        href="https://unsplash.com/@heftiba?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Toa
+                        Heftiba</a> on <a
+                        href="https://unsplash.com/photos/baked-sliced-cherry-pie-jjZsHhEtees?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Unsplash</a>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="content-text">
+                  <p>Heritability is a push-pull between genetics and environment. If environment’s input goes up,
+                    genetics’
+                    goes down (you can’t have more than 100%, right?). The output is you (or a banana). And like any
+                    good music in life or the stance on the healthfulness of butter, heritability is dynamic. As we
+                    learn more, the ratio can change.</p><br>
+
+                  <p align="center">⭐ Like Batman, science never sleeps either!</p><br>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Genotype vs Phenotype -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>Genotype vs. Phenotype</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- CONTENT: Define terms simply -->
+              <p>So, what <i>is</i> a <b>phenotype</b>? We'll do you one better: what is a
+                <b><i>genotype</i></b>?
+              </p><br>
+              <p>Simply put, a <b>phenotype</b> is an observable trait we can measure, like height or eye
+                color or ring fingers longer than pointers. Whereas a <b>genotype</b> is the genetic material. We
+                can't
+                see and measure it with our bare eyes, but we <i>can</i> with some really cool equipment. It's the
+                <b>genotype</b> which helps create the <b>phenotype</b>.
+              </p><br>
+              <p>If you want a mnemonic, think of the <b>phenotype</b> as <i>physical</i> while the
+                <b>genotype</b> is <i>genetic</i> (a bit on the nose, isn't it?). But like with your educational
+                attainment, sometimes the <b>phenotype</b> is more abstract and intangible, but still measurable. And
+                you <i>can</i> eventually touch a diploma, so we'll stand by our mnemonic.
+              </p><br>
+            </div>
+          </div>
+
+
+          <!-- Card 3: Monogenic vs Polygenic Traits -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>Monogenic vs Polygenic Traits</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              MONOGENIC vs POLYGENIC TRAITS
+                   ======================================================================== -->
+              <p>Sometimes one gene is all that's necessary for a trait to exist or change. Those are called
+                <b>monogenic</b> (mono for one), or <b>Mendelian</b>—named after <b>Gregor Mendel</b>, an Austrian monk
+                in the mid 19th century and the "father of modern genetics," who bred and studied pea plants. He studied
+                monogenic traits like flower and seed colors or texture in hybrids and offspring generations. Other
+                monogenic traits we can see in humans include things like attached vs unattached earlobes, wet vs dry
+                earwax or the ability to taste PTC (a bitter compound). More seriously, devastating diseases like
+                Huntington's disease, sickle cell anemia and cystic fibrosis are also monogenic.
+              </p><br>
+
+              <div class="content-with-image">
+                <div class="content-text">
+                  <p>Most of our traits, however, are not so simple. They are <b>complex</b> or <b>polygenic</b> (poly
+                    for many or more than one): many genes and their variants all add up to create a difference between
+                    persons. Skin or eye color, height or your educational attainment are complex traits and the result
+                    of many genes working or interfering with one another. Height has over 700 genetic variants
+                    identified so far that contribute to it!
+                  </p><br>
+                  <p align="center">⭐ Not only can one trait be the result of many genes, but one gene can affect many
+                    traits! This is called <b>pleiotropy</b>.</p>
+                </div>
+
+                <div class="content-image content-image-large">
+                  <img src="/images/stock/heterochromia.jpg?v=20251203"
+                    alt="An example of the complex trait, eye color image" />
+                  <div class="content-image-credit">
+                    <p>Photo by <a
+                        href="https://unsplash.com/@simxa?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Olga
+                        Drach</a> on <a
+                        href="https://unsplash.com/photos/a-young-boy-holding-a-dog-in-his-arms-uFYFmj780p0?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Unsplash</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Card 4: Introduction to GWAS -->
+          <div class="concept-card">
+            <div class="concept-header">
+              <h3>Discovering Trait-Associated Variants: GWAS</h3>
+              <button class="expand-btn" aria-label="Expand">+</button>
+            </div>
+            <div class="concept-content">
+              <!-- ========================================================================
+              INTRO TO GWAS
+                   ======================================================================== -->
+              <p><b>GWAS</b> (pronounced Gee-Waaah-Ss), an acronym for <b>genome-wide association study</b>, is a method
+                used to find all the variants associated with traits and diseases. It scans the genome of thousands to
+                millions of people and then compares the SNPs between people with different trait values (e.g., tall vs
+                short height, married vs divorced or high vs low educational attainment).</p><br>
+
+              <p>GWAS replaced the old <b>candidate gene studies</b> of the late ‘90s and 2000s, the method to blame for
+                the over-hyped discoveries of <b>causal</b> or significantly <b>associated</b> claims for genetics,
+                like serotonin and its role in major depressive disorder (claims that were spectacularly rebuked in a
+                publication by Border et al. in 2019). We used to just suggest to colleagues over drinks, “Gene
+                such-and-such is associated with heavy bloating effects on Thanksgiving,” and the next day start sorting
+                people out into “bloating” or “no bloating” groups. What genes differ? Those must be the genes.</p><br>
+
+              <p>Subsequently, journalists everywhere declare scientists have solved the mystery of why eating a metric
+                ton of turkey and mashed potatoes causes excessive gastrointestinal pain.</p><br>
+
+              <p>GWAS is <b>hypothesis-free</b>, in that we don't come in with a gene picked out for the study. We scan
+                the whole genome for associations between any SNP and the trait we're interested in.</p><br>
+
+              <div class="content-with-image">
+                <div class="content-text">
+                  <p>In contrast to those histrionic-inducing candidate gene studies, which had small <b>sample
+                      sizes</b>
+                    (i.e., not many people studied), GWAS requires very <i>large</i> sample sizes (hundreds of thousands
+                    to
+                    millions of people). This is because SNPs—individual variants—typically have incredibly small
+                    effects on complex traits. So small, in fact, that the first GWAS disappointed people because of how
+                    tiny the effect sizes were (i.e., how important the genes were found to be in its relationship with
+                    a
+                    trait). But with the increased <b>power</b> (larger sample sizes) this meant that those tiny effect
+                    sizes were more accurate, and now we’re setting off a lot less false alarms thanks to GWAS taking
+                    the
+                    torch from candidate gene studies.</p><br>
+                </div>
+
+                <div class="content-image content-image-large">
+                  <img src="/images/stock/snp_chip.jpg?v=20251203" alt="SNP chip in the hands of a scientist" />
+                  <div class="content-image-credit">
+                    <p>Photo by <a
+                        href="https://unsplash.com/@nci?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">National
+                        Cancer Institute</a> on <a
+                        href="https://unsplash.com/photos/person-in-blue-long-sleeve-shirt-holding-blue-plastic-toy-W6yy0wYV-hk?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+                        style="color: var(--primary-color);">Unsplash</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <p>With GWAS, and new, stringent statistical rules for when we claim significant relationships, we’ve
+                started to realize just how many SNPs are involved in each of our traits—and while they all
+                contribute a
+                tiny fraction of variance (often &lt;0.1%), when you put together hundreds to thousands of SNPs, you
+                end
+                up with explanations for substantial heritability.</p><br>
+
+              <p>Which brings us, finally, to your polygenic score. Keep reading.</p><br>
+
+              <p align="center">⭐ It’s important to know GWAS can identify associations, but it doesn’t prove
+                <i>causation</i>. SNPs can actually just tag along for the ride with their close SNP neighbors when
+                getting stirred up to produce offspring (formally, "<b>recombination</b>" and "<b>inheritance</b>") with
+                the combined genetics of parents. This is called <b>linkage</b>, and the result is what we call
+                <b>linkage disequilibrium</b>. It’s why we have to be careful before making any claims about a SNP’s
+                role in a trait.
+              </p>
+            </div>
+          </div>
+
+          <!-- SECTION 4: Understanding Your Polygenic Score -->
+          <section class="genetics-basics">
+            <h2>📊 Understanding Your Polygenic Score</h2>
+
+            <div class="section-intro">
+              <p>Now that you understand DNA, variants, and how they influence traits, you're ready to
+                understand what your polygenic score actually means!</p><br>
+            </div>
+
+            <div class="concept-cards">
+              <!-- Card 1: Polygenic Score -->
+              <div class="concept-card">
+                <div class="concept-header">
+                  <h3>What is a Polygenic Score?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="concept-content">
+                  <!-- CONTENT: Explain PGS in simple terms -->
+                  <p>Abbreviated as <b>PGS</b>, or sometimes <b>PGI</b> for <b>polygenic index</b> (same
+                    thing), this is essentially a summed up value of a bunch of your genetic <b>variants</b> and their
+                    combined effects upon your <b>phenotype</b>, or trait. In this case, your educational attainment.
+                  </p><br>
+                  <p>Think of it as a little boost to how much your genetics apply toward the trait of
+                    interest. It can be used as a predictor (though as we'll learn, genetics are <i>not</i> destiny).
+                    In this case, through some math, we can predict the highest level of education you'll attain.</p>
+                  <br>
+                </div>
+              </div>
+
+              <!-- Card 2: Z-Score -->
+              <div class="concept-card">
+                <div class="concept-header">
+                  <h3>What is a Z-Score?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="concept-content">
+                  <!-- CONTENT: Explain z-score/standard deviation in simple terms -->
+                  <p>Your <b>PGS</b> is actually what in statistics is called a <b>z-score</b>. It's not just a
+                    score like a judge gives a gymnast at a competition. Instead, it's a score that represents how
+                    different you are from the <b>mean</b> (or average) of the population. In your case, it's positive,
+                    which
+                    means (ha!) you're above average. If it were negative, it means you're below average in that
+                    <b>phenotype</b>.
+                  </p><br>
+                  <p>But what does your score of <b>3.5</b> mean in terms of <i>how</i> different you are?
+                    Well, a <b>z-score</b> is how many <b>standard deviations</b> away from the population average you
+                    are, and a <b>standard deviation</b> is a fancy statistical term for a computed value of a unit away
+                    from
+                    the average. In this case, one <b>standard deviation</b> is calculated to be worth <b>3 years</b>.
+                    Your
+                    PGS z-score is <b>3.5</b>, but because genetics only explain about <b>9.5%</b> of educational
+                    differences
+                    (<b>R² =
+                      0.0946</b>), your <i>predicted</i> deviation is actually <b>1.076 standard deviations</b> above
+                    average.
+                    This
+                    means a boost of <b>3.23</b> years on top of the average <b>14</b> years of education in the United
+                    States. Total,
+                    you're predicted to spend <b>17.23</b> years in school, which would mean your genetics are pointing
+                    you
+                    toward a Master's degree!
+                  </p><br>
+
+                  <!-- Calculation Display Box -->
+                  <div class="calculation-box">
+                    <h4>📊 How We Calculate Your Predicted Educational Attainment</h4>
+                    <div class="calculation-steps">
+                      <div class="calc-step">
+                        <div class="step-label">Step 1: Find the Correlation</div>
+                        <div class="step-math">
+                          \[r = \sqrt{R^2} = \sqrt{0.0946} = 0.3076\]
+                        </div>
+                        <div class="step-explanation">The correlation tells us the strength of the relationship between
+                          your
+                          PGS and actual educational attainment.</div>
+                      </div>
+
+                      <div class="calc-step">
+                        <div class="step-label">Step 2: Calculate Predicted Trait Deviation</div>
+                        <div class="step-math">
+                          \[\text{Predicted } z\text{-score} = r \times \text{PGS } z\text{-score} = 0.3076 \times 3.5 =
+                          1.076\]
+                        </div>
+                        <div class="step-explanation">Your genetics place you 3.5 SD above average <i>genetically</i>,
+                          but
+                          because genes only explain ~9.5% of variance, your <i>predicted</i> educational deviation is
+                          1.076
+                          SD.</div>
+                      </div>
+
+                      <div class="calc-step">
+                        <div class="step-label">Step 3: Convert to Years of Education</div>
+                        <div class="step-math">
+                          \[\text{Predicted years} = (\text{predicted } z \times \text{SD}) + \text{mean}\]
+                          \[= (1.076 \times 3) + 14 = 3.23 + 14 = 17.23 \text{ years}\]
+                        </div>
+                        <div class="step-explanation">With the U.S. average of 14 years (SD = 3 years), your predicted
+                          educational attainment is approximately 17.23 years—roughly a Master's degree level.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <br>
+                </div>
+              </div>
+
+              <!-- Card 3: How Much Do Genes Matter? -->
+              <div class="concept-card">
+                <div class="concept-header">
+                  <h3>How Much Do Genes Matter?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="concept-content">
+                  <!-- CONTENT: Explain R² = 9.5% in context -->
+                  <p>While your genetics do suggest you have <b>17.23</b> years of education ahead of you,
+                    that's neither the complete picture, nor is it a fortune teller guaranteeing (or threatening,
+                    depending
+                    on your perspective) you're going to <i>do</i> all of those years. There's another statistic
+                    involved.
+                  </p><br>
+                  <p><b>R²</b> (R squared) is how much of the <b>variance</b> (remember how you're different
+                    than the average?) is explained by an <b>independent variable</b> (<b>IV</b>). In this case, the
+                    <b>IV</b> is your genetics, and the <b>dependent variable</b>, or <b>DV</b>, (what <i>depends</i>
+                    upon
+                    and changes due to the <b>IV</b>) is your educational attainment.
+                  </p><br>
+                  <p>And in the case of this specific <b>PGS</b>, the <b>R²</b> is <b>0.0946</b>. That means
+                    your genetics, based on current research, only contributes an approximate <b>9.5%</b> to your
+                    educational attainment. Of calculated <b>PGS</b> out there, this is considered moderate.</p><br>
+                  <p>The other <b>90.5%</b>? That's everything else that <i>isn't</i> your <b>DNA</b>.
+                    Genetics are <i>not</i> destiny (more on that later).</p><br>
+                  <!-- Pie chart showing variance explained -->
+                  <div class="chart-container-small">
+                    <canvas id="varianceChart"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 5: What This Means For You -->
+          <section class="prediction-section">
+            <h2>📚 What Does This Mean For You?</h2>
+
+            <!-- CONTENT: Intro paragraph about predicted educational attainment -->
+            <div class="section-intro">
+              <p>Educational attainment, in this context, refers to the total years of schooling a person
+                completes—everything from kindergarten through potentially graduate school and beyond.</p><br>
+              <p>This trait (or
+                <b>phenotype</b>) is influenced by many factors: cognitive abilities, personality characteristics like
+                conscientiousness and curiosity, family environment, socioeconomic opportunities, and of course,
+                genetics
+                too.
+              </p><br>
+              <p>The genetic component is highly <b>polygenic</b>, meaning thousands of tiny genetic
+                <b>variants</b>
+                each contribute a
+                minuscule effect that adds up. The study used to calculate your score analyzed over 1.1 million
+                individuals
+                of European ancestry, making it one of the largest genetic studies ever conducted (Lee et al.,
+                2018).
+              </p><br>
+            </div>
+
+            <div class="prediction-display">
+              <div class="prediction-card primary">
+                <h3>Your Predicted Educational Attainment</h3>
+                <div class="prediction-value">17.23 <span>years</span></div>
+                <div class="prediction-context">Master's Level</div>
+              </div>
+
+              <div class="prediction-card comparison">
+                <h3>Population Average</h3>
+                <div class="prediction-value">14 <span>years</span></div>
+                <div class="prediction-context">~2 Years of College</div>
+              </div>
+            </div>
+
+            <!-- Education Progress Meter -->
+            <div class="timeline-container">
+              <h3>Education Prediction</h3>
+              <div class="progress-meter">
+                <!-- Background meter track -->
+                <div class="meter-track">
+                  <!-- Filled portion up to user's score (17.23 / 24 = 71.79%) -->
+                  <div class="meter-fill" style="width: 71.79%;"></div>
+
+                  <!-- Milestone markers -->
+                  <div class="milestone" style="left: 50%;" data-degree="High School Diploma"></div>
+                  <div class="milestone" style="left: 66.67%;" data-degree="Bachelor's Degree"></div>
+                  <div class="milestone" style="left: 75%;" data-degree="Master's Degree"></div>
+                  <div class="milestone" style="left: 91.67%;" data-degree="Doctoral Degree"></div>
+
+                  <!-- User's score marker (17.23 / 24 = 71.79%) -->
+                  <div class="user-score-marker" style="left: 71.79%;" data-degree="17.23 years">
+                    <div class="score-indicator"></div>
+                    <div class="user-score-popup">Your Prediction<br><strong>17.23 years</strong></div>
+                  </div>
+                </div>
+
+                <!-- Scale labels -->
+                <div class="meter-scale">
+                  <span>0 years</span>
+                  <span>12 years</span>
+                  <span>24 years</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Distribution Chart -->
+            <div class="chart-container">
+              <h3>Where You Fall in the Population</h3>
+              <canvas id="distributionChart"></canvas>
+            </div>
+          </section>
+
+          <!-- SECTION 6: Scientific Details (SCIENTIFIC DETAILS SECTION) -->
+          <section class="scientific-details">
+            <h2>🔬 For The Curious: Scientific Details</h2>
+
+            <!-- CONTENT: Brief intro -->
+            <div class="section-intro">
+              <p>You've got a basic understanding of what your <b>PGS</b> means, but if you're interested in
+                <i>how</i> that score was generated, keep scrolling!
+              </p><br>
+            </div>
+
+            <div class="detail-sections">
+              <!-- Methodology -->
+              <div class="detail-card">
+                <div class="detail-header">
+                  <h3>📊 Methodology & Data Source</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="detail-content">
+                  <!-- CONTENT: Explain GWAS, sample size, how PGS was built -->
+                  <h4>Sample Size & Composition</h4>
+
+                  <p>A 2018 study by Lee et al. combined the data of <b>~1.1 million</b> individuals from multiple GWAS
+                    and consortia, including the UK Biobank, 23andMe and the Social Science Genetic Association
+                    Consortium (SSGAC). Because of how small each SNP’s effect is on educational attainment, enormous
+                    statistical power is required through a massive sample size to detect any effects reliably.</p><br>
+
+                  <p>Educational attainment was measured as years of schooling completed, from elementary school through
+                    doctoral degrees; but it’s important to remember: the phenotype captures formal education only. It
+                    doesn't measure intelligence, knowledge or life success and nepotism.</p><br>
+
+                  <p>Notably, however, the sample is predominantly of European ancestry. While continuous work improves
+                    the diversity of our reference genomes, our samples still remain highly Eurocentric. This
+                    <b>ancestry bias</b> is an ongoing and known issue in genomics research and limits accuracy when
+                    applied to non-European ancestries. Remember linkage disequilibrium? There are chunks of our genome
+                    that stick together for different, time-separated ancestries, called <b>haploblocks</b>. The result
+                    is if someone with a very different set of haploblocks, perhaps Korean instead of German, gets a
+                    predictive score about a trait, then the accuracy of that prediction is reduced, since it was built
+                    on mostly European references.
+                  </p>
+
+                  <h4>How Your PGS Was Calculated</h4>
+                  <p>Your polygenic score is a <b>weighted sum</b> of a whole bunch of your variants across the genome.
+                    Here's the process:</p><br>
+
+                  <ol>
+                    <li><strong>GWAS identifies associations:</strong> The Lee et al. study identified thousands of SNPs
+                      that were statistically associated with educational attainment. Each SNP was assigned an
+                      "<b>effect size</b>"—how much that particular variant influences years of schooling.</li><br>
+
+                    <li><strong>Your genotype is scored:</strong> For each SNP included in the PGS, we look at your DNA
+                      to see which version (allele) you have. Some alleles are associated with higher educational
+                      attainment, some with lower, and some are neutral.</li><br>
+
+                    <li><strong>Weighted summation:</strong> Each of your alleles gets multiplied by its effect size
+                      (the "weight"), and then all of these weighted values are added up. The formula looks like this:
+
+                      <div
+                        style="text-align: center; margin: 20px 0; padding: 15px; background-color: var(--card-bg); border-radius: 8px; font-family: 'Courier New', monospace; font-size: 1.1em;">
+                        PGS = (β₁ × G₁) + (β₂ × G₂) + (β₃ × G₃) + ... + (βₙ × Gₙ)
+                      </div>
+
+                      <strong>Where:</strong>
+                      <ul style="margin-top: 10px;">
+                        <li><strong>β</strong> = Pronounced "beta," it's the effect size for each SNP (from the GWAS)
+                        </li>
+                        <li><strong>G</strong> = Your genotype at that SNP (coded as 0, 1, or 2 copies of the effect
+                          allele)</li>
+                        <li><strong>n</strong> = Total number of SNPs included in the score (essentially it means just
+                          keep going and
+                          multiplying until you run out of betas and genotypes)</li>
+                      </ul>
+
+                      <p style="text-align: center; font-style: italic; margin-top: 15px;">Don't worry, you won't be
+                        tested on this.</p>
+                    </li><br>
+
+                    <li><strong>Standardization:</strong> The final sum is standardized to have a mean of 0 and standard
+                      deviation of 1 in the discovery sample. Because of this normalizing, your polygenic score is also
+                      a z-score (in your case, <b>3.5</b>).</li>
+                  </ol><br>
+
+                  <p>The PGS used here (<b>PGS002012</b>) includes thousands of genetic variants, each contributing a
+                    tiny amount to your overall score. It's highly polygenic and complex. No single gene determines your
+                    educational outcomes—it's the combined effect of many variants across the genome.</p><br>
+                </div>
+              </div>
+
+              <!-- Study Information -->
+              <div class="detail-card">
+                <div class="detail-header">
+                  <h3>📚 Study Information & Citation</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="detail-content">
+                  <!-- CONTENT: Full citation and study details -->
+                  <h4>GWAS Discovery Study</h4>
+                  <div class="citation">
+                    Lee, J. J., Wedow, R., Okbay, A., Kong, E., Maghzian, O., Zacher, M., Nguyen-Viet, T. A.,
+                    Bowers, P., Sidorenko, J., Karlsson Linnér, R., Fontana, M. A., Kundu, T., Lee, C., Li, H., Li,
+                    R., Royer, R., Timshel, P. N., Walters, R. K., Willoughby, E. A., ... Cesarini, D. (2018). Gene
+                    discovery and polygenic prediction from a genome-wide association study of educational attainment
+                    in 1.1 million individuals. <i>Nature Genetics, 50</i>(8), 1112–1121.
+                    https://doi.org/10.1038/s41588-018-0147-3
+                  </div>
+                  <p>This GWAS combined data from over <b>1.1 million</b> individuals to identify genetic variants
+                    associated with educational attainment. It provided the foundation for creating polygenic scores.
+                  </p><br>
+
+                  <h4>Polygenic Score Implementation</h4>
+                  <div class="citation">
+                    Privé, F., Aschard, H., Carmi, S., Folkersen, L., Hoggart, C., O’Reilly, P. F., &
+                    Vilhjálmsson, B. J. (2021). Portability of 245 polygenic scores when derived from the UK Biobank
+                    and applied to 9 ancestry groups from the same cohort. <i>The American Journal of Human Genetics,
+                      108</i>(11), 1858–1872. https://doi.org/10.1016/j.ajhg.2021.08.008
+                  </div>
+                  <p>This study created and validated <b>PGS002012</b> using the Lee et al. (2018) GWAS results, testing
+                    how well the polygenic score performs across different ancestry groups. Your score is calculated
+                    using this implementation.</p><br>
+
+                  <h4>PGS Catalog Entry</h4>
+                  <p>
+                    <strong>PGS ID:</strong> PGS002012<br>
+                    <strong>Link:</strong> <a href="https://www.pgscatalog.org/score/PGS002012/" target="_blank"
+                      rel="noopener">View in PGS Catalog</a>
+                  </p>
+
+                  <h4>Study Highlights</h4>
+                  <p>Lee et al. (2018) discovered over <b>1,200</b> genetic variants associated with educational
+                    attainment using <b>1.1 million</b> individuals. Privé et al. (2022) tested portability across
+                    9 ancestry groups (as in checking if the data applies similarly outside of European ancestry),
+                    finding R² drops from <b>~11%</b> (European) to <b>~9.5%</b> (South Asian). This highlights the
+                    need for more diverse human genome reference panels.</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- SECTION 7: Important Considerations (ETHICS/CAVEATS) -->
+          <section class="considerations-section">
+            <h2>⚠️ What You Should Know</h2>
+
+            <!-- CONTENT: Brief intro about why these matter -->
+            <div class="section-intro">
+              <p>Now that you've gone through a whirlwind course on genetics and learned how yours predict your
+                educational attainment, it's probably good to lay out a few considerations.</p>
+            </div>
+
+            <div class="consideration-grid">
+              <!-- Not Destiny -->
+              <div class="consideration-card">
+                <div class="consideration-icon">🎯</div>
+                <h3>Not Destiny</h3>
+                <p align="left">We said it before, we'll say it again: your genetics are only a <i>part</i> of the
+                  picture. And in this case, a small part. Remember, for this PGS, only <b>9.5%</b> is explained by your
+                  genes alone.</p>
+              </div>
+
+              <!-- Environment Matters -->
+              <div class="consideration-card">
+                <div class="consideration-icon">🌱</div>
+                <h3>Environment Matters</h3>
+                <p align="left">The other <b>90.5%</b> contribution comes from the environment. Surround yourself with
+                  what cultivates educational success. The genes will then fan that flame.</p>
+              </div>
+
+              <!-- Privacy -->
+              <div class="consideration-card">
+                <div class="consideration-icon">🔒</div>
+                <h3>Privacy Concerns</h3>
+                <p align="left">Be wary of disclosing any genetic information to others. While genetic discrimination is
+                  not permitted, unspoken bias and discrimination can still occur. You're protected to an extent, but if
+                  you start giving away your genetics, there could be consequences.</p>
+              </div>
+
+              <!-- Ancestry Bias -->
+              <div class="consideration-card">
+                <div class="consideration-icon">🌍</div>
+                <h3>Ancestry Representation</h3>
+                <p align="left">This score was developed primarily from individuals of European ancestry. For your South
+                  Asian background, the prediction accuracy (<b>R² = 9.5%</b>) is slightly lower than the <b>~11%</b>
+                  seen in European populations. This reflects differences in genetic patterns across ancestries, not the
+                  validity of the science. More diverse studies are needed to improve accuracy for all populations.</p>
+              </div>
+
+              <!-- Wide Error Bars -->
+              <div class="consideration-card">
+                <div class="consideration-icon">📊</div>
+                <h3>Prediction Uncertainty</h3>
+                <p align="left">The prediction has wide error bars: <b>95% confidence intervals</b> means <b>±5.59
+                    years</b> around your predicted value. That means your real value could be anywhere from <b>12</b>
+                  to <b>23</b> years. Individual outcomes vary enormously, even for people with identical genetic
+                  scores.</p>
+              </div>
+
+              <!-- No Pressure -->
+              <div class="consideration-card">
+                <div class="consideration-icon">💭</div>
+                <h3>Your Path, Your Choice</h3>
+                <p align="left">If nearly 18 years of school doesn't sound appealing to you, don't fret about it. Do
+                  what makes you happy. Your genes aren't forcing you to get a Master's degree.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 8: FAQ & Resources -->
+          <section class="faq-section">
+            <h2>❓ Frequently Asked Questions</h2>
+
+            <div class="faq-list">
+              <!-- FAQ 1: Gene-Environment Correlation -->
+              <div class="faq-item">
+                <div class="faq-question">
+                  <h3>Does this capture pure genetics or environment too?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="faq-answer">
+                  <p>The PGS is calculated purely from your DNA and its SNPs. There is no
+                    environmental data involved. However, the effect sizes come from observational studies where
+                    genes and environments were correlated. People with genetic variants associated with
+                    higher education often grew up in education-rich environments (<b>gene-environment
+                      correlation</b> or <b>rGE</b>); so the prediction captures both direct genetic effects <i>and</i>
+                    some indirect
+                    effects through correlated environments in the study population. This is a limitation
+                    of observational GWAS: you can't <i>fully</i> disentangle nature from nurture.</p>
+                </div>
+              </div>
+
+              <!-- FAQ 2: Practical Guidance -->
+              <div class="faq-item">
+                <div class="faq-question">
+                  <h3>What should I do with this information?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="faq-answer">
+                  <p>Use it to better understand yourself. View it as neither a limitation (if a PGS is negative or
+                    predicts harmful effects) nor a prescription. Don't make major life decisions based solely on
+                    a PGS. Certainly consider healthier habits should they help prevent a negative trait (like
+                    Alzheimer's) and feel free to contribute to your genetic predispositions by enhancing your
+                    environment, but focus on your interests, passions and opportunities. Those are more important than
+                    a prediction.</p>
+                </div>
+              </div>
+
+              <!-- FAQ 3: Inheritance -->
+              <div class="faq-item">
+                <div class="faq-question">
+                  <h3>Can this predict my child's educational attainment?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="faq-answer">
+                  <p>Not directly. Children inherit <b>~50%</b> of variants from each parent, but specific
+                    combination is random. Your score won't ensure a similar score with your kids. Plus, as stated
+                    previously, environment matters for <b>~90%</b> of the contribution of the trait. Your parenting and
+                    the resources and opportunities provided matter more than inherited genetics.</p>
+                </div>
+              </div>
+
+              <!-- FAQ 4: Comparative Accuracy -->
+              <div class="faq-item">
+                <div class="faq-question">
+                  <h3>How accurate is this compared to other traits?</h3>
+                  <button class="expand-btn" aria-label="Expand">+</button>
+                </div>
+                <div class="faq-answer">
+                  <p><b>R² = 9.5%</b> is moderate for behavioral and social traits. Height PGS can reach <b>~25%</b>
+                    variance explained (more genetic). Schizophrenia PGS <b>~7-10%</b> (similar). Complex behavioral
+                    traits like educational attainment are heavily influenced by environment though, so 9.5% is actually
+                    pretty good for this type of trait.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- External Resources -->
+            <div class="resources-section">
+              <h3>📚 Learn More</h3>
+              <div class="resource-links">
+                <a href="https://doi.org/10.1038/s41588-018-0147-3" target="_blank" rel="noopener"
+                  class="resource-link">
+                  <span class="resource-icon">📄</span>
+                  <div>
+                    <strong>GWAS Discovery Study</strong>
+                    <span>Lee, J. J., Wedow, R., Okbay, A., Kong, E., Maghzian, O., Zacher, M., Nguyen-Viet, T. A.,
+                      Bowers, P., Sidorenko, J., Karlsson Linnér, R., Fontana, M. A., Kundu, T., Lee, C., Li, H., Li,
+                      R., Royer, R., Timshel, P. N., Walters, R. K., Willoughby, E. A., ... Cesarini, D. (2018). Gene
+                      discovery and polygenic prediction from a genome-wide association study of educational attainment
+                      in 1.1 million individuals. <i>Nature Genetics, 50</i>(8), 1112–1121.
+                      https://doi.org/10.1038/s41588-018-0147-3</span>
+                  </div>
+                </a>
+                <a href="https://doi.org/10.1016/j.ajhg.2021.11.008" target="_blank" rel="noopener"
+                  class="resource-link">
+                  <span class="resource-icon">📄</span>
+                  <div>
+                    <strong>PGS Implementation Study</strong>
+                    <span>Privé, F., Aschard, H., Carmi, S., Folkersen, L., Hoggart, C., O’Reilly, P. F., &
+                      Vilhjálmsson, B. J. (2021). Portability of 245 polygenic scores when derived from the UK Biobank
+                      and applied to 9 ancestry groups from the same cohort. <i>The American Journal of Human Genetics,
+                        108</i>(11), 1858–1872. https://doi.org/10.1016/j.ajhg.2021.08.008</span>
+                  </div>
+                </a>
+                <a href="https://www.pgscatalog.org/score/PGS002012/" target="_blank" rel="noopener"
+                  class="resource-link">
+                  <span class="resource-icon">🗂️</span>
+                  <div>
+                    <strong>PGS Catalog</strong>
+                    <span>PGS002012 - Educational Attainment</span>
+                  </div>
+                </a>
+                <a href="https://en.wikipedia.org/wiki/Heritability" target="_blank" rel="noopener"
+                  class="resource-link">
+                  <span class="resource-icon">📖</span>
+                  <div>
+                    <strong>Understanding Heritability</strong>
+                    <span>What genetic variance means</span>
+                  </div>
+                </a>
+                <a href="https://en.wikipedia.org/wiki/Gene%E2%80%93environment_correlation" target="_blank"
+                  rel="noopener" class="resource-link">
+                  <span class="resource-icon">🔗</span>
+                  <div>
+                    <strong>Gene-Environment Interaction</strong>
+                    <span>How genes and environment interplay</span>
+                  </div>
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Footer -->
+          <footer class="results-footer">
+            <p>
+              <strong>GeneGnome</strong> - Secure, Private Genetic Data Processing<br>
+              <span class="footer-note">This is an example report for educational purposes. Results are based on
+                published research and statistical modeling.</span>
+              <span class="footer-note">Unless otherwise specified, all images are public domain and sourced from
+                Wikipedia.</span>
+            </p>
+            <p class="footer-disclaimer">
+              Data is automatically deleted after 24 hours. For questions or support, contact your system administrator.
+            </p>
+          </footer>
+    </main>
+  </div>
+
+  <script src="darkmode.js?v=20251202_10"></script>
+  <script src="themes.js?v=20251202_10"></script>
+  <script src="results-example.js?v=20251202_10"></script>
+</body>
+
+</html>

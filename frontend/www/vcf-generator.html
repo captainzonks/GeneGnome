@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stisty - Genome Analysis</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="images/favicon/site.webmanifest">
+    <link rel="stylesheet" href="style.css?v=20251121">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <div class="header-title-row">
+                        <div class="header-logo">
+                            <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+                            <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+                        </div>
+                        <h1>GeneGnome</h1>
+                    </div>
+                    <p class="subtitle">VCF Generator: Privacy-First Genetic Data Analysis + Michigan Imputation Server Compatible VCF Export</p>
+                    <nav class="header-nav">
+                        <a href="home.html">⇦ Back to Home</a>
+                    </nav>
+                </div>
+                <div class="theme-controls">
+                    <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+                        <span class="icon-sun">☀️</span>
+                        <span class="icon-moon">🌙</span>
+                    </button>
+                    <div class="theme-selector-dropdown">
+                        <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+                            🎨 Theme
+                        </button>
+                        <div id="themeSelectorMenu" class="theme-selector-menu">
+                            <div class="theme-selector-option active" data-theme="earth">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                                </div>
+                                <span class="theme-selector-label">Earth</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="medical">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                                </div>
+                                <span class="theme-selector-label">Medical</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="sunshine">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Sunshine</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="spring">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Spring</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="privacy-notice">
+            <h3>🔒 Privacy Guarantee</h3>
+            <p style="margin-bottom: 1rem; font-weight: 500;">Your genetic data is YOUR data. We never see it.</p>
+            <ul>
+                <li>✅ All processing happens in your browser using WebAssembly</li>
+                <li>✅ Your genome data <strong>never leaves your device</strong></li>
+                <li>✅ No server uploads, no storage, no transmission</li>
+                <li>✅ No analytics or tracking of genetic information</li>
+                <li>✅ File reading and downloads are 100% local</li>
+                <li>✅ Open source and auditable code</li>
+            </ul>
+            <p style="margin-top: 1rem; font-size: 0.875rem; opacity: 0.9;">
+                <strong>Technical guarantee:</strong> Check your browser's network tab - you'll see zero requests containing your genetic data.
+            </p>
+        </div>
+
+        <div style="text-align: center; padding: 0.75rem; margin-bottom: 1.5rem; background: rgba(79, 70, 229, 0.05); border-radius: 0.5rem;">
+            <p style="margin: 0; font-size: 0.9rem;">
+                After imputation: <a href="process.html" style="color: var(--primary-color); font-weight: 600;">Process results with Genetics Processor →</a>
+            </p>
+        </div>
+
+        <main>
+            <section class="upload-section">
+                <h2>Upload Genome Data</h2>
+                <p class="help-text">Select your 23andMe raw data file (.txt or .tsv)</p>
+
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" accept=".txt,.tsv" />
+                    <label for="fileInput" class="file-label">Choose File</label>
+                    <span id="fileName" class="file-name">No file selected</span>
+                </div>
+
+                <div id="loadingIndicator" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Analyzing genome data...</p>
+                </div>
+            </section>
+
+            <section id="resultsSection" class="results-section hidden">
+                <h2>Analysis Results</h2>
+
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="summary">Summary</button>
+                    <button class="tab-button" data-tab="lookup">SNP Lookup</button>
+                    <button class="tab-button" data-tab="chromosome">Chromosomes</button>
+                    <button class="tab-button" data-tab="vcf">VCF Export</button>
+                </div>
+
+                <div id="summaryTab" class="tab-content active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total SNPs</h3>
+                            <p id="totalSnps" class="stat-value">-</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Heterozygosity Rate</h3>
+                            <p id="hetRate" class="stat-value">-</p>
+                            <p class="stat-help">Expected: 20-35%</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Ts/Tv Ratio</h3>
+                            <p id="tsTvRatio" class="stat-value">-</p>
+                            <p class="stat-help">Expected: ~2.0-2.1</p>
+                        </div>
+                    </div>
+
+                    <div class="charts">
+                        <div class="chart-card">
+                            <h3>Allele Frequencies</h3>
+                            <div id="alleleChart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>SNPs per Chromosome</h3>
+                            <div id="chromosomeChart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="lookupTab" class="tab-content">
+                    <div class="lookup-section">
+                        <input type="text" id="snpInput" placeholder="Enter SNP rsid (e.g., rs548049170)" />
+                        <button id="lookupButton">Look Up</button>
+                    </div>
+                    <div id="snpResults" class="snp-results hidden"></div>
+                </div>
+
+                <div id="chromosomeTab" class="tab-content">
+                    <div class="chromosome-selector">
+                        <label for="chrSelect">Select Chromosome:</label>
+                        <select id="chrSelect">
+                            <option value="">Choose...</option>
+                            <option value="1">Chromosome 1</option>
+                            <option value="2">Chromosome 2</option>
+                            <option value="3">Chromosome 3</option>
+                            <option value="4">Chromosome 4</option>
+                            <option value="5">Chromosome 5</option>
+                            <option value="6">Chromosome 6</option>
+                            <option value="7">Chromosome 7</option>
+                            <option value="8">Chromosome 8</option>
+                            <option value="9">Chromosome 9</option>
+                            <option value="10">Chromosome 10</option>
+                            <option value="11">Chromosome 11</option>
+                            <option value="12">Chromosome 12</option>
+                            <option value="13">Chromosome 13</option>
+                            <option value="14">Chromosome 14</option>
+                            <option value="15">Chromosome 15</option>
+                            <option value="16">Chromosome 16</option>
+                            <option value="17">Chromosome 17</option>
+                            <option value="18">Chromosome 18</option>
+                            <option value="19">Chromosome 19</option>
+                            <option value="20">Chromosome 20</option>
+                            <option value="21">Chromosome 21</option>
+                            <option value="22">Chromosome 22</option>
+                            <option value="X">Chromosome X</option>
+                            <option value="Y">Chromosome Y</option>
+                            <option value="MT">Mitochondrial DNA</option>
+                        </select>
+                    </div>
+                    <div id="chrResults" class="chromosome-results hidden"></div>
+                </div>
+
+                <div id="vcfTab" class="tab-content">
+                    <div class="vcf-section">
+                        <h3>Export to VCF Format</h3>
+                        <p class="help-text">Generate a standard VCF (Variant Call Format) file from your genome data.</p>
+
+                        <div class="vcf-options">
+                            <label for="vcfSampleName">Sample Name (for filenames):</label>
+                            <input type="text" id="vcfSampleName" placeholder="mygenome" maxlength="50" value="mygenome" />
+
+                            <label for="vcfChrSelect">Export Chromosome:</label>
+                            <select id="vcfChrSelect">
+                                <option value="">All Chromosomes</option>
+                                <option value="1">Chromosome 1</option>
+                                <option value="2">Chromosome 2</option>
+                                <option value="3">Chromosome 3</option>
+                                <option value="4">Chromosome 4</option>
+                                <option value="5">Chromosome 5</option>
+                                <option value="6">Chromosome 6</option>
+                                <option value="7">Chromosome 7</option>
+                                <option value="8">Chromosome 8</option>
+                                <option value="9">Chromosome 9</option>
+                                <option value="10">Chromosome 10</option>
+                                <option value="11">Chromosome 11</option>
+                                <option value="12">Chromosome 12</option>
+                                <option value="13">Chromosome 13</option>
+                                <option value="14">Chromosome 14</option>
+                                <option value="15">Chromosome 15</option>
+                                <option value="16">Chromosome 16</option>
+                                <option value="17">Chromosome 17</option>
+                                <option value="18">Chromosome 18</option>
+                                <option value="19">Chromosome 19</option>
+                                <option value="20">Chromosome 20</option>
+                                <option value="21">Chromosome 21</option>
+                                <option value="22">Chromosome 22</option>
+                                <option value="X">Chromosome X</option>
+                                <option value="Y">Chromosome Y</option>
+                                <option value="MT">Mitochondrial DNA</option>
+                            </select>
+                        </div>
+
+                        <button id="generateVcfButton" class="export-button">Generate VCF</button>
+
+                        <div id="vcfLoading" class="loading hidden">
+                            <div class="spinner"></div>
+                            <p>Generating VCF file...</p>
+                        </div>
+
+                        <div id="vcfSuccess" class="vcf-success hidden">
+                            <p>✅ VCF file generated successfully! <span id="vcfStats"></span></p>
+                            <div class="vcf-actions">
+                                <button id="showVcfButton" class="action-button">View VCF</button>
+                                <button id="downloadVcfButton" class="download-button">Download Single Chromosome</button>
+                                <button id="downloadBatchVcfButton" class="download-button batch-button">Download Chr1-22 Batch (ZIP)</button>
+                            </div>
+                        </div>
+                        <div id="vcfDisplay" class="vcf-display hidden">
+                            <div class="vcf-header">
+                                <h4>VCF Output</h4>
+                                <button id="hideVcfButton" class="close-button">Close</button>
+                            </div>
+                            <pre id="vcfContent" class="vcf-content"></pre>
+                        </div>
+
+                        <div class="info-box">
+                            <h4>Michigan Imputation Server Compatible</h4>
+                            <p>This VCF export is specifically designed for the <strong>Michigan Imputation Server 2</strong>. Features:</p>
+                            <ul>
+                                <li>✅ <strong>GRCh37 coordinates</strong> with reference alleles from human reference genome</li>
+                                <li>✅ <strong>51 samples</strong> (50 anonymous + your genome) for optimal imputation accuracy</li>
+                                <li>✅ <strong>Separate files per chromosome</strong> (chr1-22) for optimal imputation</li>
+                                <li>✅ <strong>Quality controlled</strong> - only biallelic SNPs with valid REF/ALT alleles</li>
+                                <li>✅ <strong>Sorted by position</strong> and includes no-call genotypes for server inference</li>
+                                <li>✅ <strong>Anonymous sample genotypes</strong> from population reference data (enables imputation of missing SNPs)</li>
+                            </ul>
+                            <p><strong>BGZIP Compression Required:</strong> The ZIP download includes OS-specific compression scripts. After extracting, run the script for your operating system:</p>
+                            <div style="margin-top: 0.75rem; margin-bottom: 0.75rem; font-size: 0.875rem; background: rgba(0,0,0,0.1); padding: 0.75rem; border-radius: 4px;">
+                                <div style="margin-bottom: 0.5rem;"><strong>🍎 macOS:</strong> Open Terminal, run <code>chmod +x compress_vcf.sh && ./compress_vcf.sh</code></div>
+                                <div style="margin-bottom: 0.5rem;"><strong>🐧 Linux:</strong> Open terminal, run <code>chmod +x compress_vcf.sh && ./compress_vcf.sh</code></div>
+                                <div><strong>🪟 Windows:</strong> Install bgzip first (see below), then double-click <code>compress_vcf.bat</code></div>
+                            </div>
+
+                            <details style="margin-top: 1rem; padding: 0.75rem; background: rgba(0,0,0,0.05); border-radius: 4px;">
+                                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem;">📦 Installing bgzip (Click to Expand)</summary>
+                                <div style="margin-top: 0.75rem; font-size: 0.875rem; line-height: 1.6;">
+                                    <p style="margin-bottom: 0.75rem;"><strong>macOS:</strong></p>
+                                    <pre style="background: rgba(0,0,0,0.1); padding: 0.5rem; border-radius: 3px; overflow-x: auto;">brew install htslib</pre>
+
+                                    <p style="margin-top: 1rem; margin-bottom: 0.75rem;"><strong>Linux (Debian/Ubuntu):</strong></p>
+                                    <pre style="background: rgba(0,0,0,0.1); padding: 0.5rem; border-radius: 3px; overflow-x: auto;">sudo apt install tabix</pre>
+
+                                    <p style="margin-top: 1rem; margin-bottom: 0.75rem;"><strong>Linux (RHEL/CentOS/Fedora):</strong></p>
+                                    <pre style="background: rgba(0,0,0,0.1); padding: 0.5rem; border-radius: 3px; overflow-x: auto;">sudo yum install htslib</pre>
+
+                                    <p style="margin-top: 1rem; margin-bottom: 0.75rem;"><strong>Windows - Option 1: WSL (Recommended)</strong></p>
+                                    <ol style="margin-left: 1.25rem; margin-bottom: 0.5rem;">
+                                        <li>Open PowerShell as Administrator</li>
+                                        <li>Run: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">wsl --install</code></li>
+                                        <li>Restart computer when prompted</li>
+                                        <li>Open Ubuntu (from Start menu)</li>
+                                        <li>Run: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">sudo apt update && sudo apt install tabix</code></li>
+                                        <li>Extract VCF ZIP to a folder accessible from WSL (e.g., <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">C:\Users\YourName\Downloads</code>)</li>
+                                        <li>In Ubuntu terminal: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">cd /mnt/c/Users/YourName/Downloads/vcf-files</code></li>
+                                        <li>Run: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">./compress_vcf.sh</code></li>
+                                    </ol>
+
+                                    <p style="margin-top: 1rem; margin-bottom: 0.75rem;"><strong>Windows - Option 2: Conda/Miniconda</strong></p>
+                                    <ol style="margin-left: 1.25rem; margin-bottom: 0.5rem;">
+                                        <li>Install <a href="https://docs.conda.io/en/latest/miniconda.html" target="_blank" style="color: var(--primary-color);">Miniconda</a> (lightweight) or <a href="https://www.anaconda.com/download" target="_blank" style="color: var(--primary-color);">Anaconda</a></li>
+                                        <li>Open "Anaconda Prompt" from Start menu</li>
+                                        <li>Run: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">conda install -c bioconda htslib</code></li>
+                                        <li>Navigate to extracted VCF folder: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">cd C:\path\to\vcf-files</code></li>
+                                        <li>Run: <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 2px;">compress_vcf.bat</code></li>
+                                    </ol>
+
+                                    <p style="margin-top: 1rem; margin-bottom: 0.5rem; opacity: 0.85;"><em>💡 Tip: WSL (Option 1) is recommended for genomics work on Windows as it provides a full Linux environment.</em></p>
+                                </div>
+                            </details>
+                        </div>
+
+                        <div class="info-box" style="margin-top: 2rem; padding: 1rem; background: rgba(79, 70, 229, 0.05); border-left: 3px solid var(--primary-color);">
+                            <p style="margin: 0; font-size: 0.9rem;">
+                                <strong>Next Step:</strong> After imputation, process your results with the <a href="process.html" style="color: var(--primary-color); font-weight: 600;">Genetics Processor →</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Built with <a href="https://github.com/captainzonks/Stisty" target="_blank">Stisty</a> |
+               <a href="https://github.com/captainzonks/Stisty/blob/main/GENOME_USAGE.md" target="_blank">Documentation</a> |
+               <a href="https://github.com/captainzonks/Stisty/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a></p>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem;">
+                Your data never leaves your device. <a href="https://github.com/captainzonks/Stisty/blob/main/stisty-wasm/www/PRIVACY_ARCHITECTURE.md" target="_blank">Verify it yourself →</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="darkmode.js"></script>
+    <script src="themes.js"></script>
+    <script type="module" src="vcf-app.js"></script>
+</body>
+</html>

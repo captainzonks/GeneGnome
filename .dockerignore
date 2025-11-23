@@ -1,0 +1,31 @@
+# Build artifacts
+target/
+*/target/
+**/*.rs.bk
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs/
+examples/
+
+# Test files
+tests/
+
+# Reference and Analysis Results and Data
+genome-data/
+
+# Cargo lock (we use workspace lock)
+**/Cargo.lock
+
+# Logs
+*.log
