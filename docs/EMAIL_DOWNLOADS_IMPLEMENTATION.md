@@ -80,13 +80,13 @@ CREATE INDEX idx_genetics_download_attempts_ip ON genetics_download_attempts(ip_
 ### Environment Variables (genetics.env)
 
 ```bash
-# Email Configuration (protonmail-bridge)
-GENETICS_SMTP_HOST=protonmail-bridge
-GENETICS_SMTP_PORT=587
+# Email Configuration (any SMTP provider: Gmail, Mailgun, SendGrid, local relay, etc.)
+GENETICS_SMTP_HOST=smtp.example.com       # Your SMTP server hostname
+GENETICS_SMTP_PORT=587                     # 587 for STARTTLS, 465 for SSL
 GENETICS_SMTP_USERNAME=your-email@example.com
 GENETICS_SMTP_FROM=genetics@your-domain.com
 GENETICS_SMTP_FROM_NAME=GeneGnome Genetics Processor
-GENETICS_SMTP_USE_TLS=false  # Internal Docker network
+GENETICS_SMTP_USE_TLS=true                # Enable for external SMTP, disable for local relay
 GENETICS_SMTP_TIMEOUT=30
 
 # Download Security
@@ -353,7 +353,7 @@ This is an automated message. Please do not reply to this email.
 ### Phase 2: Email Infrastructure (v1.0.0-alpha)
 - [ ] Add email dependencies to Cargo.toml
 - [ ] Create email service module (email.rs)
-- [ ] Implement SMTP connection with protonmail-bridge
+- [ ] Implement SMTP connection with configurable provider
 - [ ] Create email templates (HTML + text)
 - [ ] Add email configuration to .env
 
@@ -449,7 +449,7 @@ This is an automated message. Please do not reply to this email.
 
 ### Integration Tests
 - [ ] Job submission with email
-- [ ] Email delivery via protonmail-bridge
+- [ ] Email delivery via configured SMTP provider
 - [ ] Download with valid token + password
 - [ ] Download with invalid token
 - [ ] Download with invalid password
@@ -554,7 +554,7 @@ psql -U genetics_api -d genetics -c "\d genetics_download_attempts"
 2. Create database migration script
 3. Add email dependencies to Cargo.toml
 4. Implement email service module
-5. Test email delivery with protonmail-bridge
+5. Test email delivery with your SMTP provider
 
 **Estimated Timeline:**
 - Phase 1-2: 2 days (database + email infrastructure)

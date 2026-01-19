@@ -216,7 +216,7 @@ impl EmailSender {
                 .port(self.config.smtp_port)
                 .build()
         } else {
-            // No TLS for internal protonmail-bridge communication
+            // No TLS for internal SMTP relay (e.g., local mail bridge)
             SmtpTransport::builder_dangerous(&self.config.smtp_host)
                 .credentials(credentials)
                 .port(self.config.smtp_port)

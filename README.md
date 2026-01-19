@@ -173,7 +173,7 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
 4. **Generate secrets**
 
    ```bash
-   mkdir -p secrets/genetics secrets/proton
+   mkdir -p secrets/genetics secrets/smtp
 
    # Database password
    openssl rand -base64 32 > secrets/genetics/genetics_psql_password
@@ -184,8 +184,8 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
    # JWT signing secret
    openssl rand -base64 32 > secrets/genetics/genetics_jwt_secret
 
-   # SMTP password (or use your email provider's app password)
-   echo 'your-smtp-password' > secrets/proton/proton_bridge_password
+   # SMTP password (use your email provider's app password)
+   echo 'your-smtp-password' > secrets/smtp/smtp_password
 
    # Secure the secrets
    chmod 600 secrets/*/*

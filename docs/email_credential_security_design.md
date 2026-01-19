@@ -33,10 +33,10 @@ ALTER TABLE genetics_jobs ADD COLUMN created_at TIMESTAMP DEFAULT NOW();
 ### 3. Email Notification
 
 **SMTP Configuration:**
-- Host: `protonmail-bridge` (internal Docker network)
-- Port: `1026`
+- Host: Your SMTP server (e.g., smtp.gmail.com, smtp.mailgun.org, local relay)
+- Port: `587` (STARTTLS) or `465` (SSL)
 - From: `genetics@your-domain.com`
-- Auth: your-email@example.com credentials
+- Auth: SMTP credentials (username + password/app-password)
 
 **Email Template:**
 ```
@@ -120,7 +120,7 @@ Headers:
 - ✓ Argon2id resistant to GPU cracking
 - ✓ Unique salt per job
 - ✓ 24-hour auto-deletion
-- ✓ Credentials delivered via encrypted email (ProtonMail)
+- ✓ Credentials delivered via email (use a secure provider)
 - ✓ Two authentication factors (password OR token)
 - ✓ No public access via URL alone
 
@@ -140,7 +140,7 @@ Headers:
 - [ ] Add `lettre` crate for SMTP
 - [ ] Create email template
 - [ ] Send credentials on job creation
-- [ ] Test with protonmail-bridge
+- [ ] Test with SMTP provider
 
 **Phase 3: File Encryption**
 - [ ] Add `aes-gcm` crate
@@ -186,11 +186,11 @@ tokio = { version = "1", features = ["full"] }
 Add to `genetics.env`:
 ```bash
 # Email Configuration
-SMTP_HOST=protonmail-bridge
-SMTP_PORT=1026
+SMTP_HOST=smtp.example.com        # Your SMTP server
+SMTP_PORT=587                     # 587 for STARTTLS, 465 for SSL
 SMTP_USERNAME=your-email@example.com
 SMTP_FROM=genetics@your-domain.com
-SMTP_PASSWORD_FILE=/run/secrets/proton_bridge_password
+SMTP_PASSWORD_FILE=/run/secrets/smtp_password
 
 # Security
 ARGON2_TIME_COST=3
@@ -207,7 +207,7 @@ ARGON2_PARALLELISM=4
 - Encryption/decryption roundtrip
 
 **Integration Tests:**
-- Email sending via protonmail-bridge
+- Email sending via configured SMTP provider
 - Full job creation → email → download flow
 - Authentication with valid/invalid credentials
 - File decryption on download

@@ -130,8 +130,8 @@ secrets:
     file: ${DOCKERDIR}/secrets/genetics/genetics_api_key
   genetics_jwt_secret:
     file: ${DOCKERDIR}/secrets/genetics/genetics_jwt_secret
-  proton_bridge_password:
-    file: ${DOCKERDIR}/secrets/proton/proton_bridge_password
+  smtp_password:
+    file: ${DOCKERDIR}/secrets/smtp/smtp_password
 
 # ==============================================================================
 # SERVICES
@@ -351,7 +351,7 @@ services:
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USERNAME=${SMTP_USERNAME}
-      - SMTP_PASSWORD_FILE=/run/secrets/proton_bridge_password
+      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
       - SMTP_USE_TLS=${SMTP_USE_TLS}
       - SMTP_USE_SSL=${SMTP_USE_SSL}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
@@ -363,7 +363,7 @@ services:
     secrets:
       - genetics_db_password
       - genetics_api_key
-      - proton_bridge_password
+      - smtp_password
 
     # Port exposure
     ports:
@@ -414,7 +414,7 @@ services:
       - ALL
     user: "3000:3000"
     group_add:
-      - "968"  # docker group for accessing proton bridge secrets
+      - "968"  # docker group for accessing secrets
 
     # Resource limits (increased for multi-sample processing: 5.9M variants × 51 samples)
     deploy:
@@ -453,7 +453,7 @@ services:
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USERNAME=${SMTP_USERNAME}
-      - SMTP_PASSWORD_FILE=/run/secrets/proton_bridge_password
+      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
       - SMTP_USE_TLS=${SMTP_USE_TLS}
       - SMTP_USE_SSL=${SMTP_USE_SSL}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
@@ -467,7 +467,7 @@ services:
 
     secrets:
       - genetics_db_password
-      - proton_bridge_password
+      - smtp_password
 
   # ============================================================================
   # GENETICS FRONTEND - Job Submission UI
