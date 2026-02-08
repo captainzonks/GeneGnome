@@ -445,7 +445,7 @@ GeneGnome is inspired by the original R-based `mergeData()` pipeline by Dr. Matt
 **Status**: Production-ready (v1.0.0+)
 
 For questions, issues, or feature requests:
-- **GitHub Issues**: https://github.com/YOUR-USERNAME/GeneGnome/issues
+- **GitHub Issues**: https://github.com/captainzonks/GeneGnome/issues
 - **Email**: See [.env.example](.env.example) for contact configuration
 
 ---
