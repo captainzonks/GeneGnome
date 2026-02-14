@@ -1,0 +1,33 @@
+# ==============================================================================
+# SERVICES_GENETICS - GeneGnome Traefik Service Definitions
+# ==============================================================================
+# Description: Load balancer service configurations for GeneGnome
+# Author: Matt Barham
+# Created: 2026-02-14
+# Version: 1.0.0
+# Repository: https://github.com/captainzonks/GeneGnome
+# ==============================================================================
+
+http:
+  services:
+    # Genetics API Gateway (backend API)
+    genetics-api-svc:
+      loadBalancer:
+        servers:
+          - url: http://genetics-api-gateway:8099
+        healthCheck:
+          path: "/api/genetics/health"
+          interval: "30s"
+          timeout: "10s"
+          scheme: "http"
+
+    # Genetics Frontend (processor UI)
+    genetics-frontend-svc:
+      loadBalancer:
+        servers:
+          - url: http://genetics-frontend:80
+        healthCheck:
+          path: "/health"
+          interval: "30s"
+          timeout: "10s"
+          scheme: "http"

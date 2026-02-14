@@ -1,0 +1,140 @@
+# ==============================================================================
+# MIDDLEWARES_GENETICS - GeneGnome Traefik Middleware
+# ==============================================================================
+# Description: Self-contained middleware chains and components for GeneGnome
+# Author: Matt Barham
+# Created: 2026-02-14
+# Version: 1.1.0
+# Repository: https://github.com/captainzonks/GeneGnome
+# ==============================================================================
+#
+# All middleware chains are fully self-contained. No external middleware
+# dependencies are required for a working deployment.
+#
+# Optional Security Integrations:
+#   To add CrowdSec, Authentik, or other security middleware, append them
+#   to the relevant chain's middleware list. For example:
+#
+#     chain-genetics-uploads:
+#       chain:
+#         middlewares:
+#           - rate-limit-genetics-uploads
+#           - genetics-buffering
+#           - genetics-headers
+#           - crowdsec-bouncer@file    # <-- add your CrowdSec middleware
+#           - forward-auth@file        # <-- add your auth middleware
+#
+# ==============================================================================
+
+http:
+  middlewares:
+    # ==================================================================
+    # MIDDLEWARE CHAINS
+    # ==================================================================
+
+    # Public pages (static files, landing pages, processor UI)
+    chain-genetics-public:
+      chain:
+        middlewares:
+          - rate-limit-genetics-general
+          - genetics-headers
+
+    # Health/monitoring endpoints (minimal middleware)
+    chain-genetics-monitoring:
+      chain:
+        middlewares:
+          - rate-limit-genetics-general
+          - genetics-headers
+
+    # Standard API chain (with buffering)
+    chain-genetics:
+      chain:
+        middlewares:
+          - rate-limit-genetics-api
+          - genetics-buffering
+          - genetics-headers
+
+    # Uploads with buffering and upload-specific rate limiting
+    chain-genetics-uploads:
+      chain:
+        middlewares:
+          - rate-limit-genetics-uploads
+          - genetics-buffering
+          - genetics-headers
+
+    # Uploads without buffering (chunked uploads)
+    chain-genetics-uploads-nobuffer:
+      chain:
+        middlewares:
+          - rate-limit-genetics-uploads
+          - genetics-headers
+
+    # Downloads/streaming without buffering
+    chain-genetics-nobuffer:
+      chain:
+        middlewares:
+          - rate-limit-genetics-api
+          - genetics-headers
+
+    # ==================================================================
+    # MIDDLEWARE COMPONENTS
+    # ==================================================================
+
+    # General rate limit (public pages, health checks)
+    rate-limit-genetics-general:
+      rateLimit:
+        average: 200
+        burst: 100
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # API rate limit
+    rate-limit-genetics-api:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # Upload-specific rate limit
+    rate-limit-genetics-uploads:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # Security headers (no CORS - Axum handles CORS)
+    genetics-headers:
+      headers:
+        hostsProxyHeaders:
+          - "X-Forwarded-Host"
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        customFrameOptionsValue: SAMEORIGIN
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "same-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), vr=()"
+        customResponseHeaders:
+          X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex,"
+          server: ""
+
+    # Strip /api/genetics prefix
+    genetics-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/api/genetics"
+
+    # Large file upload buffering (500MB)
+    genetics-buffering:
+      buffering:
+        maxRequestBodyBytes: 524288000

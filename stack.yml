@@ -1,0 +1,74 @@
+module:
+  name: genetics
+  version: "1.4.0"
+  description: "Secure genetic data processing platform with defense-in-depth"
+  author: "Matt Barham"
+  license: "Apache-2.0 OR MIT"
+
+requires:
+  networks:
+    - name: proxy
+      required: true
+      description: "External reverse proxy network (name configurable via PROXY_NETWORK)"
+  hub_services:
+    - traefik
+
+env:
+  hub:
+    - TZ
+    - DOMAIN
+    - SPOKE_DIR
+    - SECRETS_DIR
+    - APPDATA_DIR
+    - PUID
+    - DGID
+    - LOCALTIME
+    - CA_CERT
+    - SSL_CERT_FILE
+    - REQUESTS_CA_BUNDLE
+    - CURL_CA_BUNDLE
+    - SMTP_HOST
+    - SMTP_PORT
+    - SMTP_USERNAME
+  module:
+    - PROXY_NETWORK
+    - IMAGE_PREFIX
+    - GENETICS_ENCRYPTED_DIR
+    - POSTGRES18_GENETICS_VERSION
+    - POSTGRES18_GENETICS_IP
+    - POSTGRES18_GENETICS_PORT
+    - POSTGRES18_GENETICS_DB
+    - POSTGRES18_GENETICS_USER
+    - GENETICS_API_VERSION
+    - GENETICS_API_IP
+    - GENETICS_API_PORT
+    - GENETICS_API_EXTERNAL_PORT
+    - GENETICS_FRONTEND_VERSION
+    - GENETICS_FRONTEND_IP
+    - GENETICS_WORKER_VERSION
+    - REDIS_VERSION
+    - GENETICS_REDIS_PORT
+    - GENETICS_LOG_LEVEL
+    - GENETICS_DOWNLOAD_BASE_URL
+
+secrets:
+  - name: genetics_db_password
+    path: genetics/genetics_psql_password
+    required: true
+  - name: genetics_api_key
+    path: genetics/genetics_api_key
+    required: true
+  - name: genetics_jwt_secret
+    path: genetics/genetics_jwt_secret
+    required: true
+  - name: smtp_password
+    path: smtp/smtp_password
+    required: true
+
+health:
+  - service: genetics-api-gateway
+    path: /api/genetics/health
+    port: 8099
+  - service: genetics-frontend
+    path: /health
+    port: 80
