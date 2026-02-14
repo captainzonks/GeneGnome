@@ -1,0 +1,104 @@
+# ==============================================================================
+# ROUTERS_GENETICS - GeneGnome Traefik Routing Rules
+# ==============================================================================
+# Description: HTTP routing rules for GeneGnome genetics processing platform
+# Author: Matt Barham
+# Created: 2026-02-14
+# Version: 1.1.0
+# Repository: https://github.com/captainzonks/GeneGnome
+# ==============================================================================
+# Domain Mapping:
+#   - genome.DOMAIN/: GeneGnome home page and VCF generator (public)
+#   - genome.DOMAIN/process: Genetics processor UI (public)
+#   - genome.DOMAIN/api/genetics/*: API backend (public, password-protected downloads)
+# ==============================================================================
+
+http:
+  routers:
+    # Genetics Health Check - Public for monitoring
+    genome-genetics-health:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && (Path(`/api/genetics/health`) || Path(`/api/genetics/ready`))
+      entryPoints: "websecure"
+      priority: 300
+      middlewares: chain-genetics-monitoring@file
+      service: genetics-api-svc@file
+
+    # Genetics Download - No buffering for large file streaming
+    genome-genetics-download:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && Path(`/api/genetics/download`)
+      entryPoints: "websecure"
+      priority: 250
+      middlewares: chain-genetics-nobuffer@file
+      service: genetics-api-svc@file
+
+    # Genetics Upload Chunks - No buffering for chunked uploads
+    genome-genetics-upload-chunks:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/api/genetics/upload/chunks`)
+      entryPoints: "websecure"
+      priority: 250
+      middlewares: chain-genetics-uploads-nobuffer@file
+      service: genetics-api-svc@file
+
+    # Genetics API - Public (email-based access control)
+    genome-genetics-api:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/api/genetics`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-uploads@file
+      service: genetics-api-svc@file
+
+    # GeneGnome Assets - Static files (JS/CSS/WASM/Images)
+    genegenome-assets:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && (Path(`/upload.js`) || Path(`/progress.js`) || Path(`/download.js`) || Path(`/darkmode.js`) || Path(`/themes.js`) || Path(`/vcf-app.js`) || Path(`/stisty_wasm.js`) || Path(`/stisty_wasm_bg.wasm`) || Path(`/reference_db.bin.br`) || Path(`/process.css`) || Path(`/home.css`) || Path(`/style.css`) || Path(`/results-example.css`) || Path(`/results-example.js`) || PathPrefix(`/images/`))
+      entryPoints: "websecure"
+      priority: 250
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # Genetics Processor UI - Public
+    genetics-processor:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/process`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # Genetics Download Page - Password entry for results
+    genetics-download:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/download`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # GeneGnome Home Page - Explicit /home route
+    genegenome-home-page:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/home`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # VCF Generator Page - Client-side processing
+    vcf-generator:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/vcf-generator`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # Results Example Page - Educational attainment demo report
+    results-example:
+      rule: (Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)) && PathPrefix(`/results-example`)
+      entryPoints: "websecure"
+      priority: 200
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
+
+    # GeneGnome Landing Page - Public access (root path)
+    genegenome-home:
+      rule: Host(`genome.{{ env "DOMAIN" }}`) || Host(`www.genegnome.org`) || Host(`genegnome.org`)
+      entryPoints: "websecure"
+      priority: 100
+      middlewares: chain-genetics-public@file
+      service: genetics-frontend-svc@file
