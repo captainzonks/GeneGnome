@@ -95,6 +95,7 @@ networks:
 
   # Isolated network for genetics processor (NO external access)
   genetics_isolated:
+    name: genetics_isolated
     driver: bridge
     internal: true  # Cannot reach external networks
     ipam:
@@ -103,6 +104,7 @@ networks:
 
   # Database network (internal only)
   genetics_db_network:
+    name: genetics_db_network
     driver: bridge
     internal: true
     ipam:
