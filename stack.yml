@@ -1,6 +1,6 @@
 module:
   name: genetics
-  version: "1.4.0"
+  version: "1.4.1"
   description: "Secure genetic data processing platform with defense-in-depth"
   author: "Matt Barham"
   license: "Apache-2.0 OR MIT"
@@ -46,7 +46,9 @@ env:
     - GENETICS_FRONTEND_VERSION
     - GENETICS_FRONTEND_IP
     - GENETICS_WORKER_VERSION
+    - GENETICS_WORKER_IP
     - REDIS_VERSION
+    - GENETICS_REDIS_IP
     - GENETICS_REDIS_PORT
     - GENETICS_LOG_LEVEL
     - GENETICS_DOWNLOAD_BASE_URL

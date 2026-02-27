@@ -4,8 +4,8 @@
 # Description: Secure genetic data processing service with defense-in-depth
 # Author: Matt Barham
 # Created: 2025-10-31
-# Modified: 2026-02-14
-# Version: 1.4.0
+# Modified: 2026-02-27
+# Version: 1.4.1
 # Repository: https://github.com/captainzonks/GeneGnome
 # ==============================================================================
 #
@@ -260,6 +260,7 @@ services:
     networks:
       genetics_isolated:
       proxy:
+        ipv4_address: ${GENETICS_REDIS_IP}
 
     ports:
       - ${GENETICS_REDIS_PORT}:6379
@@ -429,9 +430,10 @@ services:
 
     # Networks (proxy network for SMTP access if using external mail bridge)
     networks:
-      - genetics_isolated
-      - genetics_db_network
-      - proxy
+      genetics_isolated:
+      genetics_db_network:
+      proxy:
+        ipv4_address: ${GENETICS_WORKER_IP}
 
     depends_on:
       postgres18-genetics:
