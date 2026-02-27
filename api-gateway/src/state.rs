@@ -141,7 +141,7 @@ impl AppState {
         static MOCK_STATE: OnceLock<AppState> = OnceLock::new();
 
         MOCK_STATE.get_or_init(|| {
-            // This is a placeholder - in real tests you'd use test containers
+            // TODO: This is a placeholder - in real tests you'd use test containers
             panic!("Mock state not yet implemented - use integration tests with test containers");
         }).clone()
     }

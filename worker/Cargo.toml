@@ -4,8 +4,8 @@
 # Description: Rust dependencies for genetics processing worker
 # Author: Matt Barham
 # Created: 2025-11-06
-# Modified: 2026-01-17
-# Version: 1.0.0
+# Modified: 2026-02-27
+# Version: 1.1.0
 # ==============================================================================
 # Security: All versions pinned to latest stable releases (no RC/alpha/beta)
 # Review Date: 2025-11-06
@@ -14,10 +14,10 @@
 
 [package]
 name = "genetics-worker"
-version = "1.0.0"
-edition = "2021"
+version = "1.1.0"
+edition = "2024"
 authors = ["Matt Barham"]
-rust-version = "1.91"
+rust-version = "1.93.1"
 
 # ==============================================================================
 # ASYNC RUNTIME
