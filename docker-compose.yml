@@ -259,8 +259,6 @@ services:
 
     networks:
       genetics_isolated:
-      proxy:
-        ipv4_address: ${GENETICS_REDIS_IP}
 
     ports:
       - ${GENETICS_REDIS_PORT}:6379
