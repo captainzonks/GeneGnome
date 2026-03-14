@@ -4,8 +4,8 @@
 # Description: Secure genetic data processing service with defense-in-depth
 # Author: Matt Barham
 # Created: 2025-10-31
-# Modified: 2026-03-12
-# Version: 1.4.2
+# Modified: 2026-03-13
+# Version: 1.4.3
 # Repository: https://github.com/captainzonks/GeneGnome
 # ==============================================================================
 #
@@ -175,7 +175,6 @@ services:
     container_name: postgres18-genetics
     hostname: postgres18-genetics
     restart: on-failure
-    init: true
     profiles: ["genetics", "all"]
 
     # Security hardening
