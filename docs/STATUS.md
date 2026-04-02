@@ -8,7 +8,7 @@
 
 ## 🚀 Core Processing Complete
 
-The Stisty Genetics Processor **core functionality is complete and validated** against the original R script implementation.
+The GeneGnome Genetics Processor **core functionality is complete and validated** against the original R script implementation.
 
 ⚠️ **Security implementation required before v1.0.0/production:**
 - Authentication for job access/downloads
@@ -47,7 +47,7 @@ The Stisty Genetics Processor **core functionality is complete and validated** a
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      User Interface                         │
-│  (stisty-genome: WebAssembly + HTML5 drag-and-drop)        │
+│  (genetics-frontend: WebAssembly + HTML5 drag-and-drop)    │
 └─────────────────┬───────────────────────────────────────────┘
                   │
          ┌────────▼────────┐
@@ -73,7 +73,7 @@ The Stisty Genetics Processor **core functionality is complete and validated** a
 
 ### Services
 
-- **stisty-genome**: Static frontend (nginx, non-root)
+- **genetics-frontend**: Static frontend (nginx, non-root)
 - **genetics-api-gateway**: REST API (Rust/Axum)
 - **genetics-worker**: Background job processor (Rust/Tokio)
 - **genetics-postgres**: PostgreSQL 17.2
@@ -104,7 +104,7 @@ The Stisty Genetics Processor **core functionality is complete and validated** a
 - **Option 1: WSL** (recommended) - Full Linux environment
 - **Option 2: Conda** - GUI-friendly Windows installation
 
-**Location**: `/dockerfiles/stisty/stisty-wasm/www/index.html`
+**Location**: `frontend/www/home.html`
 
 ### 3. Database Performance Optimization ✅
 **Issue**: "Slow statement" warning on worker startup (1.89s)
@@ -121,7 +121,7 @@ The Stisty Genetics Processor **core functionality is complete and validated** a
 
 **Fix**: Updated to 720MB (actual: 243MB - even better than estimated!)
 
-**Location**: `/dockerfiles/stisty/stisty-wasm/www/process.html`
+**Location**: `frontend/www/process.html`
 
 ---
 
