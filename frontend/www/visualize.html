@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Insights - GeneGnome</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="images/favicon/site.webmanifest">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css?v=20251121">
+    <link rel="stylesheet" href="process.css?v=20251121">
+    <link rel="stylesheet" href="visualize.css?v=20260402">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <div class="header-title-row">
+                        <div class="header-logo">
+                            <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+                            <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+                        </div>
+                        <h1>GeneGnome</h1>
+                    </div>
+                    <p class="subtitle">Data Insights</p>
+                    <nav class="header-nav">
+                        <a href="process.html">← Back to Processor</a>
+                    </nav>
+                </div>
+                <div class="theme-controls">
+                    <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+                        <span class="icon-sun">☀️</span>
+                        <span class="icon-moon">🌙</span>
+                    </button>
+                    <div class="theme-selector-dropdown">
+                        <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+                            🎨 Theme
+                        </button>
+                        <div id="themeSelectorMenu" class="theme-selector-menu">
+                            <div class="theme-selector-option active" data-theme="earth">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                                </div>
+                                <span class="theme-selector-label">Earth</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="medical">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                                </div>
+                                <span class="theme-selector-label">Medical</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="sunshine">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Sunshine</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="spring">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Spring</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Loading state -->
+            <div id="loadingState" class="status-card" style="display: none;">
+                <div class="spinner"></div>
+                <p>Verifying credentials...</p>
+            </div>
+
+            <!-- Error state -->
+            <div id="errorState" class="status-card error-state" style="display: none;">
+                <h3>Error</h3>
+                <p id="errorMessage"></p>
+                <button onclick="window.location.href='/process'" class="btn-primary">
+                    Return to Processor
+                </button>
+            </div>
+
+            <!-- Password form -->
+            <div id="authForm" class="download-card" style="display: none;">
+                <div class="download-card-header">
+                    <h2>View Data Insights</h2>
+                    <p>Enter your password to view visualizations of your processed data</p>
+                </div>
+
+                <form id="passwordForm" class="download-card-form">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            required
+                            placeholder="Enter password from email"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="authBtn">
+                        View Insights
+                    </button>
+                </form>
+            </div>
+
+            <!-- Dashboard (hidden until authenticated) -->
+            <div id="dashboard" style="display: none;">
+                <!-- Summary cards -->
+                <div class="viz-summary-grid">
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="totalVariants">-</div>
+                        <div class="viz-summary-label">Total Variants</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="genotypedVariants">-</div>
+                        <div class="viz-summary-label">Genotyped</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="imputedVariants">-</div>
+                        <div class="viz-summary-label">Imputed</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="chromosomesProcessed">-</div>
+                        <div class="viz-summary-label">Chromosomes</div>
+                    </div>
+                </div>
+
+                <!-- Charts grid -->
+                <div class="viz-charts-grid">
+                    <div class="viz-chart-card viz-chart-wide">
+                        <h3>Variants by Chromosome</h3>
+                        <div class="viz-chart-container">
+                            <canvas id="chromosomeChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Data Source</h3>
+                        <div class="viz-chart-container viz-chart-square">
+                            <canvas id="sourceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Allele Frequency Spectrum</h3>
+                        <div class="viz-chart-container">
+                            <canvas id="alleleFreqChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Minor Allele Frequency</h3>
+                        <div class="viz-chart-container">
+                            <canvas id="mafChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Imputation Quality</h3>
+                        <div class="viz-chart-container">
+                            <canvas id="qualityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-footer-actions">
+                    <a id="downloadLink" href="#" class="btn-primary">Download Results</a>
+                    <a href="/process" class="btn-secondary">Process Another File</a>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Built with <a href="https://github.com/captainzonks/GeneGnome" target="_blank">GeneGnome</a> |
+               <a href="home.html">Home</a> |
+               <a href="https://github.com/captainzonks/GeneGnome/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a></p>
+        </footer>
+    </div>
+
+    <script src="darkmode.js"></script>
+    <script src="themes.js"></script>
+    <script src="visualize.js"></script>
+</body>
+</html>

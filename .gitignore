@@ -237,6 +237,10 @@ site/
 *.jar
 *.rar
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # ============================================================================
 # PROJECT-SPECIFIC EXCLUSIONS
 # ============================================================================
@@ -279,9 +283,10 @@ grafana_data/
 # Keep .env.example
 !.env.example
 
-# Keep documentation
+# Keep documentation (but not CLAUDE.md)
 !docs/**/*.md
 !*.md
+CLAUDE.md
 
 # Keep license files
 !LICENSE*

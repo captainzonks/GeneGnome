@@ -4,7 +4,7 @@
 // Description: Handles token-based result downloads with password verification
 // Author: Matt Barham
 // Created: 2025-11-19
-// Modified: 2025-11-19
+// Modified: 2026-04-02
 // Version: 1.0.0
 // ==============================================================================
 
@@ -113,7 +113,10 @@ function showSuccess(filename) {
                     <li><strong>VCF files:</strong> Standard genomic format</li>
                 </ul>
             </div>
-            <a href="/process" class="btn-primary" style="display: inline-block; text-decoration: none; width: 100%; margin-top: 1.5rem;">
+            <a href="/visualize?token=${encodeURIComponent(window.downloadToken)}" class="btn-primary" style="display: inline-block; text-decoration: none; width: 100%; margin-top: 1.5rem;">
+                View Data Insights
+            </a>
+            <a href="/process" class="btn-primary" style="display: inline-block; text-decoration: none; width: 100%; margin-top: 0.75rem; background: var(--card-bg); color: var(--primary-color); border: 2px solid var(--primary-color);">
                 Process Another File
             </a>
         </div>

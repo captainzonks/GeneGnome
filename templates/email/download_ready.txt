@@ -28,6 +28,15 @@ Visit the following URL to download your results:
 Enter the password above when prompted to access your data.
 
 
+VIEW DATA INSIGHTS
+================================================================================
+Explore interactive charts and statistics about your processed data:
+
+{{visualize_url}}
+
+Uses the same password as your download.
+
+
 DOWNLOAD INSTRUCTIONS
 ================================================================================
 1. Visit the download URL above

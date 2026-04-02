@@ -4,7 +4,7 @@
 // Description: Generate genetic analysis results in multiple formats for web delivery
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
+// Modified: 2026-04-02
 // Version: 1.0.0
 // ==============================================================================
 
@@ -128,6 +128,43 @@ pub struct OutputMetadata {
     pub pgs_traits: Vec<String>,
 }
 
+/// Pre-computed visualization summary for the frontend dashboard.
+/// Accumulated during chromosome-by-chromosome streaming with zero extra memory pressure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VisualizationSummary {
+    pub total_variants: usize,
+    pub genotyped_variants: usize,
+    pub imputed_variants: usize,
+    pub low_quality_variants: usize,
+    pub chromosomes_processed: u8,
+    pub per_chromosome: Vec<ChromosomeStats>,
+    pub allele_freq_histogram: Vec<HistogramBin>,
+    pub maf_histogram: Vec<HistogramBin>,
+    pub imputation_quality_histogram: Vec<HistogramBin>,
+    pub source_breakdown: SourceBreakdown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChromosomeStats {
+    pub chromosome: u8,
+    pub total: usize,
+    pub genotyped: usize,
+    pub imputed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramBin {
+    pub label: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceBreakdown {
+    pub genotyped: usize,
+    pub imputed: usize,
+    pub imputed_low_quality: usize,
+}
+
 /// Merged variant for output (simplified from internal representation)
 /// DEPRECATED: Use MultiSampleVariantOutput for new code
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,6 +257,14 @@ struct StreamingState {
     genotyped_variants: usize,
     low_quality_variants: usize,
     chromosomes_processed: u8,
+    // Visualization accumulator fields
+    per_chromosome: HashMap<u8, (usize, usize, usize)>, // (total, genotyped, imputed)
+    allele_freq_bins: [usize; 20],       // 20 bins: 0.00-0.05, 0.05-0.10, ..., 0.95-1.00
+    maf_bins: [usize; 10],              // 10 bins: 0.00-0.05, ..., 0.45-0.50
+    quality_bins: [usize; 10],          // 10 bins: 0.0-0.1, ..., 0.9-1.0
+    source_genotyped: usize,
+    source_imputed: usize,
+    source_low_quality: usize,
 }
 
 impl OutputGenerator {
@@ -1403,6 +1448,13 @@ impl OutputGenerator {
             genotyped_variants: 0,
             low_quality_variants: 0,
             chromosomes_processed: 0,
+            per_chromosome: HashMap::new(),
+            allele_freq_bins: [0; 20],
+            maf_bins: [0; 10],
+            quality_bins: [0; 10],
+            source_genotyped: 0,
+            source_imputed: 0,
+            source_low_quality: 0,
         };
 
         // Initialize each format
@@ -1583,9 +1635,13 @@ impl OutputGenerator {
 
         info!("Appending chromosome {} ({} variants) to streaming output", chromosome, variants.len());
 
-        // Update metadata
-        state.total_variants += variants.len();
-        state.genotyped_variants += variants.iter().filter(|v| v.is_typed).count();
+        // Update metadata and visualization accumulators
+        let chr_genotyped = variants.iter().filter(|v| v.is_typed).count();
+        let chr_total = variants.len();
+        let chr_imputed = chr_total - chr_genotyped;
+
+        state.total_variants += chr_total;
+        state.genotyped_variants += chr_genotyped;
         state.low_quality_variants += variants
             .iter()
             .filter(|v| {
@@ -1598,6 +1654,40 @@ impl OutputGenerator {
             })
             .count();
         state.chromosomes_processed += 1;
+
+        // Per-chromosome stats
+        state.per_chromosome.insert(chromosome, (chr_total, chr_genotyped, chr_imputed));
+
+        // Accumulate histogram bins and source breakdown from user sample (index 50)
+        for variant in variants {
+            // Allele frequency histogram (20 bins, 0.0-1.0)
+            if let Some(af) = variant.allele_freq {
+                let bin = ((af * 20.0) as usize).min(19);
+                state.allele_freq_bins[bin] += 1;
+            }
+
+            // Minor allele frequency histogram (10 bins, 0.0-0.5)
+            if let Some(maf) = variant.minor_allele_freq {
+                let bin = ((maf * 20.0) as usize).min(9);
+                state.maf_bins[bin] += 1;
+            }
+
+            // User sample stats (index 50)
+            if let Some(user_sample) = variant.samples.get(50) {
+                // Imputation quality histogram (10 bins, 0.0-1.0)
+                if let Some(qual) = user_sample.imputation_quality {
+                    let bin = ((qual * 10.0) as usize).min(9);
+                    state.quality_bins[bin] += 1;
+                }
+
+                // Source breakdown
+                match user_sample.source {
+                    DataSource::Genotyped => state.source_genotyped += 1,
+                    DataSource::Imputed => state.source_imputed += 1,
+                    DataSource::ImputedLowQual => state.source_low_quality += 1,
+                }
+            }
+        }
 
         // Append to each format
         for format in state.formats.clone() {
@@ -1948,7 +2038,7 @@ impl OutputGenerator {
     ///
     /// # Returns
     /// * HashMap of format -> file path
-    pub async fn finalize_streaming_output(&mut self) -> Result<HashMap<OutputFormat, PathBuf>> {
+    pub async fn finalize_streaming_output(&mut self) -> Result<(HashMap<OutputFormat, PathBuf>, VisualizationSummary)> {
         let mut state = self.streaming_state.take()
             .ok_or_else(|| anyhow::anyhow!("Streaming not initialized."))?;
 
@@ -2089,7 +2179,58 @@ impl OutputGenerator {
         }
 
         info!("✓ Streaming output finalized successfully");
-        Ok(result)
+
+        // Build visualization summary from accumulated counters
+        let mut per_chromosome: Vec<ChromosomeStats> = state.per_chromosome
+            .iter()
+            .map(|(&chr, &(total, genotyped, imputed))| ChromosomeStats {
+                chromosome: chr,
+                total,
+                genotyped,
+                imputed,
+            })
+            .collect();
+        per_chromosome.sort_by_key(|c| c.chromosome);
+
+        let allele_freq_histogram = (0..20)
+            .map(|i| HistogramBin {
+                label: format!("{:.2}-{:.2}", i as f64 * 0.05, (i + 1) as f64 * 0.05),
+                count: state.allele_freq_bins[i],
+            })
+            .collect();
+
+        let maf_histogram = (0..10)
+            .map(|i| HistogramBin {
+                label: format!("{:.2}-{:.2}", i as f64 * 0.05, (i + 1) as f64 * 0.05),
+                count: state.maf_bins[i],
+            })
+            .collect();
+
+        let imputation_quality_histogram = (0..10)
+            .map(|i| HistogramBin {
+                label: format!("{:.1}-{:.1}", i as f64 * 0.1, (i + 1) as f64 * 0.1),
+                count: state.quality_bins[i],
+            })
+            .collect();
+
+        let viz_summary = VisualizationSummary {
+            total_variants: state.total_variants,
+            genotyped_variants: state.genotyped_variants,
+            imputed_variants: state.total_variants - state.genotyped_variants,
+            low_quality_variants: state.low_quality_variants,
+            chromosomes_processed: state.chromosomes_processed,
+            per_chromosome,
+            allele_freq_histogram,
+            maf_histogram,
+            imputation_quality_histogram,
+            source_breakdown: SourceBreakdown {
+                genotyped: state.source_genotyped,
+                imputed: state.source_imputed,
+                imputed_low_quality: state.source_low_quality,
+            },
+        };
+
+        Ok((result, viz_summary))
     }
 }
 

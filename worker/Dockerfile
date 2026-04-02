@@ -4,11 +4,11 @@
 # Description: Background worker for genetic data processing
 # Author: Matthew Barham
 # Created: 2025-11-07
-# Modified: 2026-02-27
+# Modified: 2026-04-02
 # Version: 1.1.0
 # Host: your-server
 # ==============================================================================
-# Base Image: rust:1.93-slim (build), alpine:latest (runtime)
+# Base Image: rust:1.94-slim (build), alpine:latest (runtime)
 # Target Architecture: amd64
 # Security: non-root user (default genetics:3000, configurable), minimal dependencies
 # ==============================================================================
@@ -27,7 +27,7 @@
 # BUILD STAGE - Compile Rust Application
 #=============================================================================
 
-FROM rust:1.93-slim AS builder
+FROM rust:1.94-slim AS builder
 
 # Install build dependencies
 RUN apt update -qq && apt install -y -qq --no-install-recommends \
