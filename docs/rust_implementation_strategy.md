@@ -18,7 +18,7 @@ Status: Draft
 
 ## Executive Summary
 
-This document outlines the phased implementation strategy for building the Stisty-Server genetics processing pipeline in Rust. The goal is to port the R-based `mergeData.R` workflow to a secure, performant Rust implementation while maintaining data compatibility and scientific accuracy.
+This document outlines the phased implementation strategy for building the GeneGnome genetics processing pipeline in Rust. The goal is to port the R-based `mergeData.R` workflow to a secure, performant Rust implementation while maintaining data compatibility and scientific accuracy.
 
 **Approach**: Build foundation slowly, test thoroughly, validate against R outputs.
 
@@ -983,7 +983,7 @@ cat("Saved RData to:", output_file, "\n")
 ### Build and Test
 ```bash
 # Build project
-cd ~/repos/Stisty-Server/app
+cd ~/repos/GeneGnome/app
 cargo build --release
 
 # Run tests

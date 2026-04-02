@@ -22,7 +22,7 @@ Status: Draft
 This document provides a detailed technical specification of the `mergeData.R` processing pipeline to guide Rust implementation. The pipeline merges personal genomic data (23andMe), imputed variants (Michigan Imputation Server 2 VCF files), and polygenic scores (PGS) into a single R workspace file.
 
 **Source File**: `mergeData.R` (374 lines)
-**Target Implementation**: Rust (stisty-server)
+**Target Implementation**: Rust (GeneGnome)
 **Reference Panel**: 50 anonymous samples from openSNP
 
 ## Processing Pipeline Overview

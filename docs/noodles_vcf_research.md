@@ -18,7 +18,7 @@ Status: Draft
 
 ## Overview
 
-Research into the `noodles` Rust crate ecosystem for parsing VCF (Variant Call Format) files in the Stisty-Server genetic data processing pipeline.
+Research into the `noodles` Rust crate ecosystem for parsing VCF (Variant Call Format) files in the GeneGnome genetic data processing pipeline.
 
 **Primary Crate**: `noodles-vcf`
 **Current Version**: 0.81.0 (as of 2025-11-04)
