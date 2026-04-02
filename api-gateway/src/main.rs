@@ -4,7 +4,7 @@
 // Description: Axum web server for genetics data processing API
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-01-17
+// Modified: 2026-04-02
 // Version: 1.1.0
 // ==============================================================================
 
@@ -87,6 +87,8 @@ fn build_router(state: AppState) -> Router {
         .route("/jobs/{job_id}/ws", get(handlers::job_progress_ws))
         // Download results (Phase 6: secure token-based download with password)
         .route("/download", get(handlers::download_results))
+        // Visualization data (same auth as download, non-destructive)
+        .route("/visualization", get(handlers::get_visualization))
         // Chunked upload endpoints (for files >50MB, Cloudflare bypass)
         .route("/upload/chunks", post(handlers::upload_chunk))
         .route("/upload/finalize", post(handlers::finalize_upload))

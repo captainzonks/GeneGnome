@@ -4,7 +4,7 @@
 // Description: Send email notifications for completed genetics processing jobs
 // Author: Matt Barham
 // Created: 2025-11-18
-// Modified: 2025-11-18
+// Modified: 2026-04-02
 // Version: 1.0.0
 // Phase: Phase 5 - Email Sending
 // ==============================================================================
@@ -161,6 +161,12 @@ impl EmailSender {
         variables.insert(
             "download_url".to_string(),
             format!("{}?token={}", self.config.download_base_url, download_token),
+        );
+        // Derive visualize URL from download URL (replace /download with /visualize)
+        let visualize_base = self.config.download_base_url.replace("/download", "/visualize");
+        variables.insert(
+            "visualize_url".to_string(),
+            format!("{}?token={}", visualize_base, download_token),
         );
 
         // Load and render templates

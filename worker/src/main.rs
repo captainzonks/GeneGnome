@@ -4,7 +4,7 @@
 // Description: Background worker that processes genetics jobs from Redis queue
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
+// Modified: 2026-04-02
 // Version: 1.0.0
 // ==============================================================================
 
@@ -170,7 +170,7 @@ impl Worker {
         info!("Processing job {}", job_id);
 
         // Update job status to processing
-        self.update_job_status(job_id, &payload.user_id, "processing", None, None, None, None, None).await?;
+        self.update_job_status(job_id, &payload.user_id, "processing", None, None, None, None, None, None).await?;
         self.publish_progress(job_id, 0.0, "Starting processing").await?;
 
         // Phase 7.1: Reassemble chunks if this is a chunked upload
@@ -203,7 +203,7 @@ impl Worker {
 
         // Execute processing
         match processor.process(&payload.output_formats, payload.quality_threshold).await {
-            Ok(_) => {
+            Ok(viz_summary) => {
                 info!("Job {} completed successfully", job_id);
                 let completed_at = Utc::now();
                 let expires_at = completed_at + chrono::Duration::hours(24);
@@ -257,6 +257,7 @@ impl Worker {
                     token.as_deref(),
                     password_hash.as_deref(),
                     Some(zip_path_str),
+                    Some(&viz_summary),
                 ).await?;
 
                 // Phase 5: Send email notification
@@ -329,7 +330,7 @@ impl Worker {
             Err(e) => {
                 error!("Job {} failed: {}", job_id, e);
                 let error_msg = format!("{:#}", e);
-                self.update_job_status(job_id, &payload.user_id, "failed", Some(&error_msg), None, None, None, None).await?;
+                self.update_job_status(job_id, &payload.user_id, "failed", Some(&error_msg), None, None, None, None, None).await?;
                 self.publish_progress(job_id, 0.0, &format!("Failed: {}", error_msg)).await?;
             }
         }
@@ -348,6 +349,7 @@ impl Worker {
         download_token: Option<&str>,
         download_password_hash: Option<&str>,
         result_path: Option<&str>,
+        viz_summary: Option<&genetics_processor::output::VisualizationSummary>,
     ) -> Result<()> {
         let now = Utc::now();
 
@@ -373,7 +375,13 @@ impl Worker {
             .await
             .context("Failed to update job status to processing")?;
         } else if status == "completed" {
-            // Phase 4: Update with email, download credentials, and result path
+            // Build metadata JSONB with visualization summary
+            let metadata_json = if let Some(viz) = viz_summary {
+                serde_json::json!({"visualization": viz})
+            } else {
+                serde_json::json!({})
+            };
+
             sqlx::query(
                 "UPDATE genetics.genetics_jobs
                  SET status = $1,
@@ -381,7 +389,8 @@ impl Worker {
                      user_email = $3,
                      download_token = $4,
                      download_password_hash = $5,
-                     result_path = $6
+                     result_path = $6,
+                     metadata = COALESCE(metadata, '{}'::jsonb) || $8::jsonb
                  WHERE id = $7"
             )
             .bind(status)
@@ -391,6 +400,7 @@ impl Worker {
             .bind(download_password_hash)
             .bind(result_path)
             .bind(job_id)
+            .bind(metadata_json)
             .execute(&mut *tx)
             .await
             .context("Failed to update job status to completed")?;
@@ -520,7 +530,7 @@ impl Worker {
 
             // Mark job as failed with explanation
             let error_msg = "Job interrupted by worker restart. Please resubmit your data.";
-            self.update_job_status(job_id, &user_id, "failed", Some(error_msg), None, None, None, None).await?;
+            self.update_job_status(job_id, &user_id, "failed", Some(error_msg), None, None, None, None, None).await?;
             self.publish_progress(job_id, 0.0, error_msg).await?;
         }
 

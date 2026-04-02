@@ -5,7 +5,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](docker-compose.yml)
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.94+-orange?logo=rust)](https://www.rust-lang.org/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21U3S1R)
 
@@ -49,6 +49,7 @@ GeneGnome is a self-hosted platform for processing genetic data from direct-to-c
 - Process up to 6 million variants across 51 samples in ~2 minutes
 - Automatically clean up processed data after configurable retention period
 - Provide secure, password-protected download links via email
+- Visualize processed data with interactive charts (allele frequency, imputation quality, per-chromosome stats)
 
 ---
 
@@ -251,6 +252,7 @@ For detailed setup instructions, see [docs/SETUP.md](docs/SETUP.md) (if availabl
 2. **Monitor progress**: Real-time progress updates via WebSocket
 3. **Receive email**: Secure download link sent when processing completes
 4. **Download results**: Password-protected Parquet/VCF/SQLite files
+5. **Explore insights**: Interactive visualization dashboard with charts for your data
 
 ### VCF Generator (Browser-Only)
 
@@ -275,6 +277,9 @@ curl http://your-domain.com/api/genetics/status/{job_id}
 
 # Download results (requires token from email)
 curl -O http://your-domain.com/download/{job_id}?token={download_token}&password={password}
+
+# Get visualization data (same credentials, non-destructive)
+curl http://your-domain.com/api/genetics/visualization?token={download_token}&password={password}
 ```
 
 See [docs/API.md](docs/API.md) for complete API documentation (if available).
@@ -443,8 +448,8 @@ GeneGnome is inspired by the original R-based `mergeData()` pipeline by Dr. Matt
 
 **Author**: Matthew Barham
 **Created**: 2025-10-31
-**Last Updated**: 2025-11-20
-**Status**: Production-ready (v1.0.0+)
+**Last Updated**: 2026-04-02
+**Status**: Production-ready (v1.1.0+)
 
 For questions, issues, or feature requests:
 - **GitHub Issues**: https://github.com/captainzonks/GeneGnome/issues

@@ -4,7 +4,7 @@
 // Description: Execute genetics processor on uploaded files
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
+// Modified: 2026-04-02
 // Version: 1.0.0
 // ==============================================================================
 
@@ -94,7 +94,7 @@ impl JobProcessor {
     }
 
     /// Main processing function
-    pub async fn process(&self, output_formats: &[OutputFormat], quality_threshold: QualityThreshold) -> Result<()> {
+    pub async fn process(&self, output_formats: &[OutputFormat], quality_threshold: QualityThreshold) -> Result<genetics_processor::output::VisualizationSummary> {
         info!("Starting multi-sample genetics processing (51 samples) for job {} with quality threshold: {:?}",
             self.job_id, quality_threshold);
 
@@ -158,7 +158,7 @@ impl JobProcessor {
 
         // Step 6 & 7: Merge and stream output chromosome-by-chromosome (memory-efficient)
         self.publish_progress(55.0, "Starting streaming multi-sample processing (51 samples × 22 autosomes)").await?;
-        let output_paths = self.merge_and_stream_chromosomes(
+        let (output_paths, viz_summary) = self.merge_and_stream_chromosomes(
             &genome_data,
             &vcf_data,
             pgs_data.as_ref(),
@@ -173,7 +173,7 @@ impl JobProcessor {
 
         self.publish_progress(100.0, "Multi-sample processing complete (51 samples)").await?;
 
-        Ok(())
+        Ok(viz_summary)
     }
 
     /// Find uploaded files in upload directory
@@ -283,7 +283,7 @@ impl JobProcessor {
         pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
         quality_threshold: QualityThreshold,
         output_formats: &[OutputFormat],
-    ) -> Result<HashMap<String, PathBuf>> {
+    ) -> Result<(HashMap<String, PathBuf>, genetics_processor::output::VisualizationSummary)> {
         use genetics_processor::output::OutputGenerator;
 
         info!("════════════════════════════════════════════════════════════════");
@@ -404,7 +404,7 @@ impl JobProcessor {
         // Finalize streaming output (close files, write metadata, create indexes)
         self.publish_progress(90.0, "Finalizing output files (metadata, indexes)...").await?;
         info!("Finalizing streaming output (closing files, writing metadata, creating indexes)...");
-        let output_paths_map = output_gen.finalize_streaming_output().await?;
+        let (output_paths_map, viz_summary) = output_gen.finalize_streaming_output().await?;
         info!("✓ Output finalization complete!");
 
         // Convert HashMap<OutputFormat, PathBuf> to HashMap<String, PathBuf>
@@ -419,10 +419,12 @@ impl JobProcessor {
         for (format, path) in &output_paths {
             info!("  {} -> {:?}", format, path);
         }
+        info!("Visualization summary: {} variants across {} chromosomes",
+              viz_summary.total_variants, viz_summary.chromosomes_processed);
         info!("Memory efficient: Never held more than 1 chromosome in memory");
         info!("════════════════════════════════════════════════════════════════");
 
-        Ok(output_paths)
+        Ok((output_paths, viz_summary))
     }
 
     /// Merge multi-sample data (50 reference panel + 1 user = 51 samples) [DEPRECATED - use merge_and_stream_chromosomes]

@@ -4,7 +4,7 @@
 // Description: HTTP request handlers for genetics API endpoints
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
+// Modified: 2026-04-02
 // Version: 1.0.0
 // ==============================================================================
 
@@ -957,11 +957,91 @@ struct JobDownloadRecord {
     user_id: String,
     status: String,
     result_path: Option<String>,
+    metadata: Option<serde_json::Value>,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     download_password_hash: Option<String>,
     download_attempts: i32,
     max_download_attempts: i32,
     last_download_attempt: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Validated job returned after credential verification
+struct ValidatedJob {
+    id: Uuid,
+    result_path: Option<String>,
+    metadata: Option<serde_json::Value>,
+}
+
+/// Validate download credentials (token + password) against the database.
+///
+/// Performs 5-layer validation: status, expiry, attempt limit, rate limit, password.
+/// Does NOT increment download_attempts (caller decides whether to count the access).
+async fn validate_download_credentials(
+    token: &str,
+    password: &str,
+    pool: &sqlx::PgPool,
+) -> Result<ValidatedJob, AppError> {
+    let client_ip = "unknown".to_string();
+
+    let job: Option<JobDownloadRecord> = sqlx::query_as(
+        r#"
+        SELECT id, user_id, status, result_path, metadata, expires_at,
+               download_password_hash, download_attempts,
+               max_download_attempts, last_download_attempt
+        FROM genetics_jobs
+        WHERE download_token = $1
+        "#,
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    let job = job.ok_or(AppError::NotFound)?;
+    let job_id = job.id;
+
+    if job.status != "completed" {
+        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, false, true, false, "job_not_found").await;
+        return Err(AppError::BadRequest("Job not completed".to_string()));
+    }
+
+    if let Some(expires_at) = job.expires_at {
+        if expires_at < Utc::now() {
+            let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "job_expired").await;
+            return Err(AppError::BadRequest("Download link expired".to_string()));
+        }
+    }
+
+    if job.download_attempts >= job.max_download_attempts {
+        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "max_attempts_exceeded").await;
+        return Err(AppError::BadRequest("Maximum download attempts exceeded".to_string()));
+    }
+
+    if let Some(last_attempt) = job.last_download_attempt {
+        let since_last = Utc::now().signed_duration_since(last_attempt);
+        if since_last.num_seconds() < 20 {
+            let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "rate_limited").await;
+            return Err(AppError::BadRequest("Too many attempts, please wait".to_string()));
+        }
+    }
+
+    let password_hash = job.download_password_hash
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
+
+    let password_valid = verify_password(password, password_hash)
+        .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
+
+    if !password_valid {
+        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "invalid_password").await;
+        return Err(AppError::BadRequest("Invalid password".to_string()));
+    }
+
+    Ok(ValidatedJob {
+        id: job_id,
+        result_path: job.result_path,
+        metadata: job.metadata,
+    })
 }
 
 /// Download a completed job's results with token and password
@@ -979,110 +1059,10 @@ pub async fn download_results(
 
     info!("Download attempt with token: {}...", &token[..8.min(token.len())]);
 
-    // Get client IP for audit logging (from headers if behind proxy)
-    let client_ip = "unknown".to_string(); // TODO: Extract from headers
+    let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
+    let job_id = validated.id;
 
-    // Query database for job with matching token
-    let job: Option<JobDownloadRecord> = sqlx::query_as(
-        r#"
-        SELECT id, user_id, status, result_path, expires_at,
-               download_password_hash, download_attempts,
-               max_download_attempts, last_download_attempt
-        FROM genetics_jobs
-        WHERE download_token = $1
-        "#,
-    )
-    .bind(&token)
-    .fetch_optional(state.db_pool())
-    .await
-    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
-
-    let job = job.ok_or(AppError::NotFound)?;
-
-    let job_id = job.id;
-    info!("Download attempt for job {}", job_id);
-
-    // PUBLIC PLATFORM: No user ownership check needed
-    // Token+password provides sufficient security (only job owner has these credentials)
-
-    // Check 1: Job must be completed
-    if job.status != "completed" {
-        let _ = record_download_attempt(
-            state.db_pool(),
-            job_id,
-            &client_ip,
-            "unknown",
-            true,
-            false,
-            true,
-            false,
-            "job_not_found",
-        ).await;
-        return Err(AppError::BadRequest("Job not completed".to_string()));
-    }
-
-    // Check 2: Job must not be expired
-    if let Some(expires_at) = job.expires_at {
-        if expires_at < Utc::now() {
-            let _ = record_download_attempt(
-                state.db_pool(),
-                job_id,
-                &client_ip,
-                "unknown",
-                true,
-                true,
-                true,
-                false,
-                "job_expired",
-            ).await;
-            return Err(AppError::BadRequest("Download link expired".to_string()));
-        }
-    }
-
-    // Check 3: Max attempts not exceeded
-    if job.download_attempts >= job.max_download_attempts {
-        let _ = record_download_attempt(
-            state.db_pool(),
-            job_id,
-            &client_ip,
-            "unknown",
-            true,
-            true,
-            true,
-            false,
-            "max_attempts_exceeded",
-        ).await;
-        return Err(AppError::BadRequest("Maximum download attempts exceeded".to_string()));
-    }
-
-    // Check 4: Rate limiting (max 3 attempts per minute)
-    if let Some(last_attempt) = job.last_download_attempt {
-        let since_last = Utc::now().signed_duration_since(last_attempt);
-        if since_last.num_seconds() < 20 {  // 20 seconds between attempts
-            let _ = record_download_attempt(
-                state.db_pool(),
-                job_id,
-                &client_ip,
-                "unknown",
-                true,
-                true,
-                true,
-                false,
-                "rate_limited",
-            ).await;
-            return Err(AppError::BadRequest("Too many attempts, please wait".to_string()));
-        }
-    }
-
-    // Check 5: Verify password
-    let password_hash = job.download_password_hash
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
-
-    let password_valid = verify_password(&password, password_hash)
-        .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
-
-    // Increment download attempts
+    // Increment download attempts (downloads are destructive -- count them)
     sqlx::query(
         "UPDATE genetics.genetics_jobs
          SET download_attempts = download_attempts + 1,
@@ -1094,22 +1074,7 @@ pub async fn download_results(
     .await
     .map_err(|e| AppError::Internal(format!("Failed to update attempts: {}", e)))?;
 
-    if !password_valid {
-        let _ = record_download_attempt(
-            state.db_pool(),
-            job_id,
-            &client_ip,
-            "unknown",
-            true,
-            true,
-            true,
-            false,
-            "invalid_password",
-        ).await;
-        return Err(AppError::BadRequest("Invalid password".to_string()));
-    }
-
-    // Password valid - proceed with download
+    let client_ip = "unknown".to_string();
     let _ = record_download_attempt(
         state.db_pool(),
         job_id,
@@ -1123,7 +1088,7 @@ pub async fn download_results(
     ).await;
 
     // Get result file path
-    let result_path = job.result_path
+    let result_path = validated.result_path
         .ok_or_else(|| AppError::Internal("No result path found".to_string()))?;
 
     let file_path = PathBuf::from(&result_path);
@@ -1205,6 +1170,32 @@ async fn record_download_attempt(
     .await?;
 
     Ok(())
+}
+
+// ==============================================================================
+// VISUALIZATION ENDPOINT
+// ==============================================================================
+
+/// Get visualization data for a completed job using the same token+password as download.
+///
+/// Visualization views do NOT count against the download attempt limit (non-destructive).
+pub async fn get_visualization(
+    Query(query_params): Query<DownloadRequest>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let token = query_params.token;
+    let password = query_params.password
+        .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
+
+    let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
+
+    let viz_data = validated.metadata
+        .and_then(|m| m.get("visualization").cloned())
+        .ok_or_else(|| AppError::NotFound)?;
+
+    info!("Serving visualization data for job {}", validated.id);
+
+    Ok(Json(viz_data))
 }
 
 /// Application error type
