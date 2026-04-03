@@ -315,6 +315,8 @@ services:
 
     # Run as dedicated non-root user
     user: "3000:3000"
+    group_add:
+      - "968"  # docker group for accessing secrets
 
     # Security hardening
     security_opt:
