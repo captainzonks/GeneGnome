@@ -19,6 +19,36 @@ pub struct JobSubmitResponse {
     pub status: JobStatus,
     pub created_at: DateTime<Utc>,
     pub estimated_completion: Option<DateTime<Utc>>,
+    /// Recovery codes (only present on initial submission, never returned again)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_codes: Option<Vec<String>>,
+}
+
+/// Public job status response (no sensitive fields exposed)
+#[derive(Debug, Serialize)]
+pub struct JobPublicStatusResponse {
+    pub job_id: Uuid,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub has_download: bool,
+}
+
+/// Email resend response
+#[derive(Debug, Serialize)]
+pub struct ResendEmailResponse {
+    pub success: bool,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_resend_available_at: Option<DateTime<Utc>>,
+}
+
+/// Delete job request (recovery code in body)
+#[derive(Debug, Deserialize)]
+pub struct DeleteJobRequest {
+    pub recovery_code: String,
 }
 
 /// Job status response

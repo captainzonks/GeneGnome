@@ -554,11 +554,11 @@ impl Worker {
     async fn cleanup_old_jobs(&self) -> Result<()> {
         let cutoff = Utc::now() - chrono::Duration::hours(24);
 
-        // Find old completed jobs
+        // Find old completed/failed jobs (24h+) and user-deleted jobs (immediate)
         let old_jobs: Vec<(Uuid, String)> = sqlx::query_as(
             "SELECT id, user_id FROM genetics.genetics_jobs
-             WHERE status IN ('completed', 'failed')
-             AND completed_at < $1"
+             WHERE (status IN ('completed', 'failed') AND completed_at < $1)
+                OR status = 'user_deleted'"
         )
         .bind(cutoff)
         .fetch_all(&self.db_pool)

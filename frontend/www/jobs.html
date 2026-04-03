@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Lookup - GeneGnome</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="images/favicon/site.webmanifest">
+    <link rel="stylesheet" href="style.css?v=20251121">
+    <link rel="stylesheet" href="jobs.css?v=1">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <div class="header-title-row">
+                        <div class="header-logo">
+                            <img src="images/genegnome_light.svg" alt="GeneGnome" class="logo logo-light">
+                            <img src="images/genegnome_dark.svg" alt="GeneGnome" class="logo logo-dark">
+                        </div>
+                        <h1>GeneGnome</h1>
+                    </div>
+                    <p class="subtitle">Job Lookup | Check Status, Resend Email, or Delete Data</p>
+                    <nav class="header-nav">
+                        <a href="home.html">⇦ Back to Home</a>
+                    </nav>
+                </div>
+                <div class="theme-controls">
+                    <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+                        <span class="icon-sun">☀️</span>
+                        <span class="icon-moon">🌙</span>
+                    </button>
+                    <div class="theme-selector-dropdown">
+                        <button id="themeSelectorButton" class="theme-selector-button" aria-label="Select color theme">
+                            🎨 Theme
+                        </button>
+                        <div id="themeSelectorMenu" class="theme-selector-menu">
+                            <div class="theme-selector-option active" data-theme="earth">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #c1744a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #7a8450;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f5ede3;"></div>
+                                </div>
+                                <span class="theme-selector-label">Earth</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="medical">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #4a90c1;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #5078a0;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #e8f2f7;"></div>
+                                </div>
+                                <span class="theme-selector-label">Medical</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="sunshine">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #e8a844;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #d47a3a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #fef9ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Sunshine</span>
+                            </div>
+                            <div class="theme-selector-option" data-theme="spring">
+                                <div class="theme-color-preview">
+                                    <div class="theme-color-swatch" style="background-color: #6ba84a;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #78a85f;"></div>
+                                    <div class="theme-color-swatch" style="background-color: #f0f7ed;"></div>
+                                </div>
+                                <span class="theme-selector-label">Spring</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Lookup Section -->
+            <section id="lookupSection" class="lookup-section">
+                <h2>Look Up Your Job</h2>
+                <p class="help-text">Enter your Job ID to check status, resend your download email, or manage your data.</p>
+
+                <div class="lookup-form">
+                    <div class="input-group">
+                        <input type="text" id="jobIdInput" placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                               pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+                               spellcheck="false" autocomplete="off">
+                        <button id="lookupBtn" class="btn btn-primary">Look Up</button>
+                    </div>
+                    <span class="input-hint">Your Job ID was shown when you submitted your data and is in your download email.</span>
+                </div>
+            </section>
+
+            <!-- Status Card (hidden until lookup) -->
+            <section id="statusSection" class="status-section hidden">
+                <div class="status-card">
+                    <div class="status-header">
+                        <h3>Job Status</h3>
+                        <span id="statusBadge" class="status-badge"></span>
+                    </div>
+
+                    <div class="status-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Job ID</span>
+                            <span id="detailJobId" class="detail-value monospace">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Created</span>
+                            <span id="detailCreated" class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row" id="detailStartedRow">
+                            <span class="detail-label">Started</span>
+                            <span id="detailStarted" class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row" id="detailCompletedRow">
+                            <span class="detail-label">Completed</span>
+                            <span id="detailCompleted" class="detail-value">-</span>
+                        </div>
+                        <div class="detail-row" id="detailExpiresRow">
+                            <span class="detail-label">Expires</span>
+                            <span id="detailExpires" class="detail-value">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Action: Resend Email (completed jobs with download) -->
+                    <div id="resendSection" class="action-section hidden">
+                        <div class="info-box info-blue">
+                            <h4>Download Email</h4>
+                            <p>Your download link and password were emailed when processing completed. If you didn't receive it, you can resend it below.</p>
+                            <p style="margin-top: 0.5rem; font-size: 0.875rem;"><strong>Note:</strong> Resending generates a new password. Your old password will no longer work.</p>
+                        </div>
+                        <button id="resendEmailBtn" class="btn btn-primary" style="margin-top: 1rem;">Resend Download Email</button>
+                        <p id="resendCooldown" class="cooldown-text hidden"></p>
+                        <p id="resendResult" class="result-text hidden"></p>
+                    </div>
+
+                    <!-- Action: Delete Data -->
+                    <div id="deleteSection" class="action-section hidden">
+                        <div class="info-box info-warning">
+                            <h4>Delete My Data</h4>
+                            <p>Permanently delete all uploaded files and processed results for this job. This action cannot be undone.</p>
+                        </div>
+                        <div id="deleteForm" class="delete-form hidden">
+                            <label for="recoveryCodeInput">Enter a Recovery Code</label>
+                            <input type="text" id="recoveryCodeInput" placeholder="XXXX-XXXX-XXXX"
+                                   spellcheck="false" autocomplete="off" class="recovery-input">
+                            <div class="delete-actions">
+                                <button id="cancelDeleteBtn" class="btn btn-secondary">Cancel</button>
+                                <button id="confirmDeleteBtn" class="btn btn-danger">Delete My Data</button>
+                            </div>
+                        </div>
+                        <button id="showDeleteBtn" class="btn btn-danger-outline" style="margin-top: 1rem;">Delete My Data</button>
+                        <p id="deleteResult" class="result-text hidden"></p>
+                    </div>
+
+                    <!-- Info messages for non-actionable states -->
+                    <div id="infoMessage" class="info-message hidden"></div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="errorSection" class="error-section hidden">
+                <div class="info-box info-warning">
+                    <h4 id="errorTitle">Job Not Found</h4>
+                    <p id="errorMessage">The Job ID you entered could not be found. Please check the ID and try again.</p>
+                </div>
+                <button id="tryAgainBtn" class="btn btn-primary" style="margin-top: 1rem;">Try Again</button>
+            </section>
+        </main>
+
+        <footer>
+            <p><a href="https://github.com/captainzonks/GeneGnome" target="_blank">GeneGnome</a> |
+               <a href="home.html">Home</a> |
+               <a href="https://github.com/captainzonks/GeneGnome/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a></p>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem;">
+                🔒 Server-side processing with automatic 72-hour deletion |
+                <a href="https://github.com/captainzonks/GeneGnome" target="_blank">Security Architecture →</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="darkmode.js"></script>
+    <script src="themes.js"></script>
+    <script src="jobs.js?v=1"></script>
+</body>
+</html>

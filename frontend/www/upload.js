@@ -61,10 +61,18 @@ class GeneticsUploader {
         // Sections
         this.sections = {
             upload: document.getElementById('uploadSection'),
+            recoveryCodes: document.getElementById('recoveryCodesSection'),
             processing: document.getElementById('processingSection'),
             results: document.getElementById('resultsSection'),
             error: document.getElementById('errorSection')
         };
+
+        // Recovery codes elements
+        this.codesList = document.getElementById('codesList');
+        this.copyCodesBtn = document.getElementById('copyCodesBtn');
+        this.downloadCodesBtn = document.getElementById('downloadCodesBtn');
+        this.codesSavedBtn = document.getElementById('codesSavedBtn');
+        this.recoveryJobId = document.getElementById('recoveryJobId');
 
         // Buttons
         this.deleteButton = document.getElementById('deleteButton');
@@ -114,6 +122,17 @@ class GeneticsUploader {
         // File list actions
         this.clearAllButton.addEventListener('click', () => this.clearAll());
         this.uploadButton.addEventListener('click', () => this.startUpload());
+
+        // Recovery codes actions
+        if (this.copyCodesBtn) {
+            this.copyCodesBtn.addEventListener('click', () => this.copyAllCodes());
+        }
+        if (this.downloadCodesBtn) {
+            this.downloadCodesBtn.addEventListener('click', () => this.downloadCodesAsText());
+        }
+        if (this.codesSavedBtn) {
+            this.codesSavedBtn.addEventListener('click', () => this.proceedToProcessing());
+        }
 
         // Results actions
         if (this.deleteButton) {
@@ -334,15 +353,11 @@ class GeneticsUploader {
         this.saveJobToHistory(this.currentJobId);
         this.updateURLWithJobId(this.currentJobId);
 
-        // Switch messages: hide upload warning, show processing note
-        const uploadWarning = document.getElementById('uploadWarning');
-        const processingNote = document.getElementById('processingNote');
-        if (uploadWarning) uploadWarning.classList.add('hidden');
-        if (processingNote) processingNote.classList.remove('hidden');
-
-        // Start progress monitoring
-        if (window.progressMonitor) {
-            window.progressMonitor.startMonitoring(this.currentJobId);
+        // Show recovery codes if present, otherwise go straight to processing
+        if (result.recovery_codes && result.recovery_codes.length > 0) {
+            this.showRecoveryCodes(result.recovery_codes, result.job_id);
+        } else {
+            this.startProcessingMonitor();
         }
     }
 
@@ -455,10 +470,90 @@ class GeneticsUploader {
         this.saveJobToHistory(this.currentJobId);
         this.updateURLWithJobId(this.currentJobId);
 
-        // Remove uploading animation and switch to processing message
+        // Remove uploading animation
         if (progressFill) {
             progressFill.classList.remove('uploading');
         }
+
+        // Show recovery codes if present, otherwise go straight to processing
+        if (result.recovery_codes && result.recovery_codes.length > 0) {
+            this.showRecoveryCodes(result.recovery_codes, result.job_id);
+        } else {
+            this.startProcessingMonitor();
+        }
+    }
+
+    showRecoveryCodes(codes, jobId) {
+        this.pendingRecoveryCodes = codes;
+        this.showSection('recoveryCodes');
+
+        // Display job ID
+        if (this.recoveryJobId) {
+            this.recoveryJobId.textContent = jobId;
+        }
+
+        // Render code items
+        if (this.codesList) {
+            this.codesList.innerHTML = '';
+            codes.forEach((code) => {
+                const item = document.createElement('div');
+                item.className = 'recovery-code-item';
+                item.textContent = code;
+                item.title = 'Click to copy';
+                item.addEventListener('click', () => {
+                    navigator.clipboard.writeText(code).then(() => {
+                        item.classList.add('copied');
+                        setTimeout(() => item.classList.remove('copied'), 1500);
+                    });
+                });
+                this.codesList.appendChild(item);
+            });
+        }
+    }
+
+    copyAllCodes() {
+        if (!this.pendingRecoveryCodes) return;
+        const text = this.pendingRecoveryCodes.join('\n');
+        navigator.clipboard.writeText(text).then(() => {
+            this.showSuccessToast('Codes Copied', 'All recovery codes copied to clipboard.');
+        });
+    }
+
+    downloadCodesAsText() {
+        if (!this.pendingRecoveryCodes || !this.currentJobId) return;
+        const shortId = this.currentJobId.substring(0, 8);
+        const date = new Date().toISOString().split('T')[0];
+        const lines = [
+            'GeneGnome Recovery Codes',
+            '========================',
+            '',
+            `Job ID: ${this.currentJobId}`,
+            `Date: ${date}`,
+            '',
+            'Each code can only be used once.',
+            'Use these codes on the Job Lookup page to delete your data.',
+            '',
+            ...this.pendingRecoveryCodes.map((code, i) => `${i + 1}. ${code}`),
+            '',
+            'Keep this file in a safe place.',
+        ];
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `genegnome_recovery_codes_${shortId}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    proceedToProcessing() {
+        this.pendingRecoveryCodes = null;
+        this.startProcessingMonitor();
+    }
+
+    startProcessingMonitor() {
+        this.showSection('processing');
 
         // Switch messages: hide upload warning, show processing note
         const uploadWarning = document.getElementById('uploadWarning');

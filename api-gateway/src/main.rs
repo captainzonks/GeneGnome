@@ -24,6 +24,7 @@ use tower_http::{
 };
 use tracing::{info, Level};
 
+mod email;
 mod handlers;
 mod middleware;
 mod models;
@@ -89,6 +90,10 @@ fn build_router(state: AppState) -> Router {
         .route("/download", get(handlers::download_results))
         // Visualization data (same auth as download, non-destructive)
         .route("/visualization", get(handlers::get_visualization))
+        // Job management (public status, resend email, self-service deletion)
+        .route("/jobs/{job_id}/status", get(handlers::get_job_public_status))
+        .route("/jobs/{job_id}/resend-email", post(handlers::resend_email))
+        .route("/jobs/{job_id}/delete", post(handlers::delete_job_with_recovery))
         // Chunked upload endpoints (for files >50MB, Cloudflare bypass)
         .route("/upload/chunks", post(handlers::upload_chunk))
         .route("/upload/finalize", post(handlers::finalize_upload))

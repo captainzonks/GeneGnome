@@ -31,7 +31,7 @@ use crate::{
     // PUBLIC PLATFORM: No authentication middleware needed
     models::*,
     queue::{JobPayload, JobQueue},
-    security::verify_password,
+    security::{verify_password, generate_recovery_codes, normalize_recovery_code, hash_password, generate_download_password},
     state::AppState,
     validator::FileValidator,
 };
@@ -323,6 +323,26 @@ pub async fn submit_job(
     .await
     .map_err(|e| AppError::Internal(format!("Failed to create job in database: {}", e)))?;
 
+    // Generate recovery codes (CPU-intensive: 8 Argon2id hashes)
+    let (plaintext_codes, hashed_codes) = tokio::task::spawn_blocking(generate_recovery_codes)
+        .await
+        .map_err(|e| AppError::Internal(format!("Recovery code generation task failed: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Failed to generate recovery codes: {}", e)))?;
+
+    // Store hashed recovery codes in database
+    for hash in &hashed_codes {
+        sqlx::query(
+            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)"
+        )
+        .bind(job_id)
+        .bind(hash)
+        .execute(state.db_pool())
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to store recovery code: {}", e)))?;
+    }
+
+    info!("Generated {} recovery codes for job {}", plaintext_codes.len(), job_id);
+
     // Create results directory for job
     let job_results_dir = state.results_dir().join(job_id.to_string());
     tokio::fs::create_dir_all(&job_results_dir)
@@ -352,7 +372,8 @@ pub async fn submit_job(
         job_id,
         status: JobStatus::Queued,
         created_at,
-        estimated_completion: None, // TODO: Calculate based on queue length
+        estimated_completion: None,
+        recovery_codes: Some(plaintext_codes),
     }))
 }
 
@@ -906,6 +927,26 @@ pub async fn finalize_upload(
     .await
     .map_err(|e| AppError::Internal(format!("Failed to create job in database: {}", e)))?;
 
+    // Generate recovery codes (CPU-intensive: 8 Argon2id hashes)
+    let (plaintext_codes, hashed_codes) = tokio::task::spawn_blocking(generate_recovery_codes)
+        .await
+        .map_err(|e| AppError::Internal(format!("Recovery code generation task failed: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Failed to generate recovery codes: {}", e)))?;
+
+    // Store hashed recovery codes in database
+    for hash in &hashed_codes {
+        sqlx::query(
+            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)"
+        )
+        .bind(job_id)
+        .bind(hash)
+        .execute(state.db_pool())
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to store recovery code: {}", e)))?;
+    }
+
+    info!("Generated {} recovery codes for job {}", plaintext_codes.len(), job_id);
+
     // Create results directory for job
     let job_results_dir = state.results_dir().join(job_id.to_string());
     tokio::fs::create_dir_all(&job_results_dir)
@@ -936,6 +977,7 @@ pub async fn finalize_upload(
         status: JobStatus::Queued,
         created_at,
         estimated_completion: None,
+        recovery_codes: Some(plaintext_codes),
     }))
 }
 
@@ -1196,6 +1238,227 @@ pub async fn get_visualization(
     info!("Serving visualization data for job {}", validated.id);
 
     Ok(Json(viz_data))
+}
+
+// ==============================================================================
+// JOB MANAGEMENT ENDPOINTS
+// ==============================================================================
+
+/// Public job status lookup (no auth required, UUID is the secret)
+pub async fn get_job_public_status(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+) -> Result<Json<JobPublicStatusResponse>, AppError> {
+    let row: Option<(Uuid, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>,
+        Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT id, status, created_at, started_at, completed_at, expires_at, download_token
+             FROM genetics.genetics_jobs WHERE id = $1"
+        )
+        .bind(job_id)
+        .fetch_optional(state.db_pool())
+        .await
+        .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+
+    let (id, status, created_at, started_at, completed_at, expires_at, download_token) =
+        row.ok_or(AppError::NotFound)?;
+
+    let has_download = download_token.is_some()
+        && status == "completed"
+        && expires_at.map_or(false, |exp| exp > Utc::now());
+
+    Ok(Json(JobPublicStatusResponse {
+        job_id: id,
+        status,
+        created_at,
+        started_at,
+        completed_at,
+        expires_at,
+        has_download,
+    }))
+}
+
+/// Resend download email (rate-limited: 1 per 5 minutes)
+pub async fn resend_email(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+) -> Result<Json<ResendEmailResponse>, AppError> {
+    // Fetch job details
+    let row: Option<(Uuid, String, Option<String>, Option<String>,
+        Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>,
+        Option<chrono::DateTime<Utc>>)> =
+        sqlx::query_as(
+            "SELECT id, status, user_email, download_token, completed_at, expires_at, last_email_resent_at
+             FROM genetics.genetics_jobs WHERE id = $1"
+        )
+        .bind(job_id)
+        .fetch_optional(state.db_pool())
+        .await
+        .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+
+    let (_id, status, user_email, download_token, completed_at, expires_at, last_resent) =
+        row.ok_or(AppError::NotFound)?;
+
+    // Validate job state
+    if status != "completed" {
+        return Err(AppError::BadRequest("Job is not completed yet".to_string()));
+    }
+    if let Some(exp) = expires_at {
+        if exp < Utc::now() {
+            return Err(AppError::BadRequest("Job has expired".to_string()));
+        }
+    }
+    let user_email = user_email
+        .ok_or_else(|| AppError::BadRequest("No email address on file for this job".to_string()))?;
+    let download_token = download_token
+        .ok_or_else(|| AppError::Internal("Job completed but has no download token".to_string()))?;
+
+    // Rate limit: 5 minutes between resends
+    if let Some(last) = last_resent {
+        let since = Utc::now().signed_duration_since(last);
+        if since.num_seconds() < 300 {
+            let next_available = last + chrono::Duration::seconds(300);
+            return Ok(Json(ResendEmailResponse {
+                success: false,
+                message: "Please wait before requesting another email resend".to_string(),
+                next_resend_available_at: Some(next_available),
+            }));
+        }
+    }
+
+    // Generate NEW password (invalidates the old one)
+    let new_password = tokio::task::spawn_blocking(generate_download_password)
+        .await
+        .map_err(|e| AppError::Internal(format!("Password generation task failed: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Failed to generate password: {}", e)))?;
+
+    let new_password_clone = new_password.clone();
+    let new_hash = tokio::task::spawn_blocking(move || hash_password(&new_password_clone))
+        .await
+        .map_err(|e| AppError::Internal(format!("Password hashing task failed: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Failed to hash password: {}", e)))?;
+
+    // Update credentials and reset attempts
+    sqlx::query(
+        "UPDATE genetics.genetics_jobs
+         SET download_password_hash = $1, download_attempts = 0,
+             last_download_attempt = NULL, last_email_resent_at = NOW()
+         WHERE id = $2"
+    )
+    .bind(&new_hash)
+    .bind(job_id)
+    .execute(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Failed to update credentials: {}", e)))?;
+
+    // Send email with existing token + new password
+    let completed_at = completed_at.unwrap_or_else(Utc::now);
+    let expires_at = expires_at.unwrap_or_else(|| Utc::now() + chrono::Duration::hours(24));
+
+    let email_sender = crate::email::EmailSender::from_env()
+        .map_err(|e| AppError::Internal(format!("Failed to initialize email sender: {}", e)))?;
+
+    email_sender.send_download_notification(
+        job_id,
+        &user_email,
+        &download_token,
+        &new_password,
+        &completed_at,
+        &expires_at,
+    ).await
+    .map_err(|e| AppError::Internal(format!("Failed to send email: {}", e)))?;
+
+    info!("Resent download email for job {} to {}", job_id, user_email);
+
+    let next_available = Utc::now() + chrono::Duration::seconds(300);
+    Ok(Json(ResendEmailResponse {
+        success: true,
+        message: "A new download email has been sent. Any previously sent passwords are no longer valid.".to_string(),
+        next_resend_available_at: Some(next_available),
+    }))
+}
+
+/// Delete job data using a recovery code
+pub async fn delete_job_with_recovery(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+    Json(body): Json<DeleteJobRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // Fetch job
+    let row: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, status FROM genetics.genetics_jobs WHERE id = $1"
+    )
+    .bind(job_id)
+    .fetch_optional(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+
+    let (_id, status) = row.ok_or(AppError::NotFound)?;
+
+    if status == "user_deleted" {
+        return Err(AppError::BadRequest("This job has already been deleted".to_string()));
+    }
+
+    // Normalize the provided recovery code
+    let normalized_code = normalize_recovery_code(&body.recovery_code);
+    if normalized_code.len() != 12 {
+        return Err(AppError::BadRequest("Invalid recovery code format".to_string()));
+    }
+
+    // Fetch all unused recovery codes for this job
+    let codes: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, code_hash FROM genetics.genetics_recovery_codes
+         WHERE job_id = $1 AND used = false"
+    )
+    .bind(job_id)
+    .fetch_all(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Failed to fetch recovery codes: {}", e)))?;
+
+    if codes.is_empty() {
+        return Err(AppError::Forbidden);
+    }
+
+    // Verify the code against each hash (CPU-intensive, use spawn_blocking)
+    let codes_clone = codes.clone();
+    let code_for_verify = normalized_code.clone();
+    let matched_code_id = tokio::task::spawn_blocking(move || {
+        for (code_id, hash) in &codes_clone {
+            if let Ok(true) = verify_password(&code_for_verify, hash) {
+                return Some(*code_id);
+            }
+        }
+        None
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Recovery code verification task failed: {}", e)))?;
+
+    let matched_id = matched_code_id.ok_or(AppError::Forbidden)?;
+
+    // Mark the recovery code as used
+    sqlx::query(
+        "UPDATE genetics.genetics_recovery_codes SET used = true, used_at = NOW() WHERE id = $1"
+    )
+    .bind(matched_id)
+    .execute(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Failed to mark recovery code as used: {}", e)))?;
+
+    // Mark the job as user_deleted
+    sqlx::query(
+        "UPDATE genetics.genetics_jobs SET status = 'user_deleted' WHERE id = $1"
+    )
+    .bind(job_id)
+    .execute(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Failed to delete job: {}", e)))?;
+
+    info!("Job {} marked as user_deleted via recovery code", job_id);
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "Your data has been scheduled for deletion and will be permanently removed shortly."
+    })))
 }
 
 /// Application error type

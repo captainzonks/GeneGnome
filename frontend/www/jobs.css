@@ -1,0 +1,305 @@
+/* Job Lookup Page Styles */
+
+/* Dark mode info box overrides */
+body.dark-mode .info-blue {
+    background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+    border-left-color: var(--primary-color);
+    color: var(--text-color);
+}
+
+body.dark-mode .info-warning {
+    background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+    border-left-color: var(--warning-color);
+    color: var(--text-color);
+}
+
+/* Lookup Section */
+.lookup-section {
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.lookup-form {
+    margin-top: 1.5rem;
+}
+
+.input-group {
+    display: flex;
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.input-group input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-family: 'Courier New', monospace;
+    border: 2px solid var(--border-color, #ddd);
+    border-radius: 8px;
+    background: var(--bg-secondary, #fff);
+    color: var(--text-color);
+    transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.input-hint {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+/* Status Section */
+.status-section {
+    max-width: 650px;
+    margin: 0 auto;
+}
+
+.status-card {
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 12px;
+    padding: 2rem;
+}
+
+body.dark-mode .status-card {
+    background: var(--bg-secondary, #1e1e1e);
+    border-color: var(--border-color, #333);
+}
+
+.status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color, #eee);
+}
+
+.status-header h3 {
+    margin: 0;
+}
+
+.status-badge {
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-badge.pending,
+.status-badge.queued {
+    background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+    color: var(--primary-color);
+}
+
+.status-badge.processing {
+    background: color-mix(in srgb, #2196f3 15%, transparent);
+    color: #2196f3;
+}
+
+.status-badge.completed {
+    background: color-mix(in srgb, var(--success-color, #4caf50) 15%, transparent);
+    color: var(--success-color, #4caf50);
+}
+
+.status-badge.failed {
+    background: color-mix(in srgb, var(--danger-color, #f44336) 15%, transparent);
+    color: var(--danger-color, #f44336);
+}
+
+.status-badge.expired {
+    background: color-mix(in srgb, #9e9e9e 15%, transparent);
+    color: #9e9e9e;
+}
+
+.status-badge.user_deleted {
+    background: color-mix(in srgb, #9e9e9e 15%, transparent);
+    color: #9e9e9e;
+}
+
+/* Status Details */
+.status-details {
+    margin-bottom: 1.5rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color, #eee) 50%, transparent);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.detail-value {
+    text-align: right;
+}
+
+.monospace {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+/* Action Sections */
+.action-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color, #eee);
+}
+
+/* Delete Form */
+.delete-form {
+    margin-top: 1rem;
+}
+
+.delete-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.recovery-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border: 2px solid var(--border-color, #ddd);
+    border-radius: 8px;
+    background: var(--bg-secondary, #fff);
+    color: var(--text-color);
+    text-align: center;
+    box-sizing: border-box;
+}
+
+body.dark-mode .recovery-input {
+    background: var(--bg-color, #121212);
+    border-color: var(--border-color, #444);
+}
+
+.recovery-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.delete-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    justify-content: flex-end;
+}
+
+/* Button Variants */
+.btn-danger-outline {
+    background: transparent;
+    color: var(--danger-color, #f44336);
+    border: 2px solid var(--danger-color, #f44336);
+    padding: 0.6rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-danger-outline:hover {
+    background: var(--danger-color, #f44336);
+    color: white;
+}
+
+/* Result and cooldown text */
+.result-text {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.result-text.success {
+    color: var(--success-color, #4caf50);
+}
+
+.result-text.error {
+    color: var(--danger-color, #f44336);
+}
+
+.cooldown-text {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Info message for non-actionable states */
+.info-message {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+    font-size: 0.95rem;
+}
+
+body.dark-mode .info-message {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
+/* Error Section */
+.error-section {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+/* Loading state */
+.btn.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.btn.loading::after {
+    content: '...';
+    animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .input-group {
+        flex-direction: column;
+    }
+
+    .status-card {
+        padding: 1.25rem;
+    }
+
+    .detail-row {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .detail-value {
+        text-align: left;
+    }
+
+    .delete-actions {
+        flex-direction: column;
+    }
+}
