@@ -11,7 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="style.css?v=20251121">
     <link rel="stylesheet" href="process.css?v=20251121">
-    <link rel="stylesheet" href="visualize.css?v=20260402">
+    <link rel="stylesheet" href="visualize.css?v=20260402b">
 </head>
 <body>
     <div class="container">
@@ -140,6 +140,22 @@
                         <div class="viz-summary-value" id="chromosomesProcessed">-</div>
                         <div class="viz-summary-label">Chromosomes</div>
                     </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="tiTvRatio">-</div>
+                        <div class="viz-summary-label">Ti/Tv Ratio</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="hetRate">-</div>
+                        <div class="viz-summary-label">Heterozygosity Rate</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="snpCount">-</div>
+                        <div class="viz-summary-label">SNPs</div>
+                    </div>
+                    <div class="viz-summary-card">
+                        <div class="viz-summary-value" id="indelCount">-</div>
+                        <div class="viz-summary-label">Indels</div>
+                    </div>
                 </div>
 
                 <!-- Charts grid -->
@@ -176,6 +192,27 @@
                         <h3>Imputation Quality</h3>
                         <div class="viz-chart-container">
                             <canvas id="qualityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card viz-chart-wide">
+                        <h3>Ti/Tv Ratio by Chromosome</h3>
+                        <div class="viz-chart-container">
+                            <canvas id="tiTvChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Dosage Distribution</h3>
+                        <div class="viz-chart-container viz-chart-square">
+                            <canvas id="dosageChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="viz-chart-card">
+                        <h3>Variant Types</h3>
+                        <div class="viz-chart-container viz-chart-square">
+                            <canvas id="variantTypeChart"></canvas>
                         </div>
                     </div>
                 </div>

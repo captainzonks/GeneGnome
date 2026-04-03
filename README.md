@@ -49,7 +49,7 @@ GeneGnome is a self-hosted platform for processing genetic data from direct-to-c
 - Process up to 6 million variants across 51 samples in ~2 minutes
 - Automatically clean up processed data after configurable retention period
 - Provide secure, password-protected download links via email
-- Visualize processed data with interactive charts (allele frequency, imputation quality, per-chromosome stats)
+- Visualize processed data with interactive charts (allele frequency, imputation quality, Ti/Tv ratio, heterozygosity, dosage distribution, variant types, per-chromosome stats)
 
 ---
 

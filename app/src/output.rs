@@ -5,7 +5,7 @@
 // Author: Matt Barham
 // Created: 2025-11-06
 // Modified: 2026-04-02
-// Version: 1.0.0
+// Version: 1.2.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -142,6 +142,14 @@ pub struct VisualizationSummary {
     pub maf_histogram: Vec<HistogramBin>,
     pub imputation_quality_histogram: Vec<HistogramBin>,
     pub source_breakdown: SourceBreakdown,
+    /// Global transition/transversion ratio (SNPs only). None if no transversions observed.
+    pub ti_tv_ratio: Option<f64>,
+    /// Global heterozygosity rate for user sample (het calls / total calls)
+    pub heterozygosity_rate: Option<f64>,
+    /// Dosage distribution for user sample (binned: <0.5 = hom ref, 0.5-1.5 = het, >1.5 = hom alt)
+    pub dosage_distribution: DosageDistribution,
+    /// SNP vs indel counts (SNP = single-base ref AND alt)
+    pub variant_types: VariantTypeCounts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +158,14 @@ pub struct ChromosomeStats {
     pub total: usize,
     pub genotyped: usize,
     pub imputed: usize,
+    /// Transitions count (A↔G, C↔T) for this chromosome (SNPs only)
+    pub transitions: usize,
+    /// Transversions count for this chromosome (SNPs only)
+    pub transversions: usize,
+    /// Ti/Tv ratio for this chromosome. None if no transversions.
+    pub ti_tv_ratio: Option<f64>,
+    /// Heterozygosity rate for user sample on this chromosome
+    pub heterozygosity_rate: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +179,21 @@ pub struct SourceBreakdown {
     pub genotyped: usize,
     pub imputed: usize,
     pub imputed_low_quality: usize,
+}
+
+/// Dosage distribution for the user sample (binned by rounding)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DosageDistribution {
+    pub homozygous_ref: usize,
+    pub heterozygous: usize,
+    pub homozygous_alt: usize,
+}
+
+/// SNP vs indel variant type counts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariantTypeCounts {
+    pub snps: usize,
+    pub indels: usize,
 }
 
 /// Merged variant for output (simplified from internal representation)
@@ -265,6 +296,22 @@ struct StreamingState {
     source_genotyped: usize,
     source_imputed: usize,
     source_low_quality: usize,
+    // Ti/Tv ratio accumulators (SNPs only)
+    transitions: usize,
+    transversions: usize,
+    per_chr_transitions: HashMap<u8, usize>,
+    per_chr_transversions: HashMap<u8, usize>,
+    // Heterozygosity accumulators (user sample)
+    het_count: usize,
+    het_total_called: usize,
+    per_chr_het: HashMap<u8, (usize, usize)>, // (het_count, total_called)
+    // Dosage distribution (user sample, binned)
+    dosage_hom_ref: usize,
+    dosage_het: usize,
+    dosage_hom_alt: usize,
+    // Variant type counts
+    snp_count: usize,
+    indel_count: usize,
 }
 
 impl OutputGenerator {
@@ -1455,6 +1502,18 @@ impl OutputGenerator {
             source_genotyped: 0,
             source_imputed: 0,
             source_low_quality: 0,
+            transitions: 0,
+            transversions: 0,
+            per_chr_transitions: HashMap::new(),
+            per_chr_transversions: HashMap::new(),
+            het_count: 0,
+            het_total_called: 0,
+            per_chr_het: HashMap::new(),
+            dosage_hom_ref: 0,
+            dosage_het: 0,
+            dosage_hom_alt: 0,
+            snp_count: 0,
+            indel_count: 0,
         };
 
         // Initialize each format
@@ -1658,7 +1717,12 @@ impl OutputGenerator {
         // Per-chromosome stats
         state.per_chromosome.insert(chromosome, (chr_total, chr_genotyped, chr_imputed));
 
-        // Accumulate histogram bins and source breakdown from user sample (index 50)
+        // Accumulate histogram bins, source breakdown, and enhanced stats
+        let mut chr_transitions: usize = 0;
+        let mut chr_transversions: usize = 0;
+        let mut chr_het_count: usize = 0;
+        let mut chr_het_total: usize = 0;
+
         for variant in variants {
             // Allele frequency histogram (20 bins, 0.0-1.0)
             if let Some(af) = variant.allele_freq {
@@ -1670,6 +1734,27 @@ impl OutputGenerator {
             if let Some(maf) = variant.minor_allele_freq {
                 let bin = ((maf * 20.0) as usize).min(9);
                 state.maf_bins[bin] += 1;
+            }
+
+            // SNP vs indel classification (by allele length)
+            let is_snp = variant.ref_allele.len() == 1 && variant.alt_allele.len() == 1;
+            if is_snp {
+                state.snp_count += 1;
+
+                // Ti/Tv classification (only for SNPs)
+                let ref_base = variant.ref_allele.as_bytes()[0];
+                let alt_base = variant.alt_allele.as_bytes()[0];
+                let is_transition = matches!(
+                    (ref_base, alt_base),
+                    (b'A', b'G') | (b'G', b'A') | (b'C', b'T') | (b'T', b'C')
+                );
+                if is_transition {
+                    chr_transitions += 1;
+                } else {
+                    chr_transversions += 1;
+                }
+            } else {
+                state.indel_count += 1;
             }
 
             // User sample stats (index 50)
@@ -1686,8 +1771,32 @@ impl OutputGenerator {
                     DataSource::Imputed => state.source_imputed += 1,
                     DataSource::ImputedLowQual => state.source_low_quality += 1,
                 }
+
+                // Heterozygosity (het genotypes: "0|1" or "1|0")
+                chr_het_total += 1;
+                if user_sample.genotype == "0|1" || user_sample.genotype == "1|0" {
+                    chr_het_count += 1;
+                }
+
+                // Dosage distribution (user sample)
+                if user_sample.dosage < 0.5 {
+                    state.dosage_hom_ref += 1;
+                } else if user_sample.dosage > 1.5 {
+                    state.dosage_hom_alt += 1;
+                } else {
+                    state.dosage_het += 1;
+                }
             }
         }
+
+        // Accumulate per-chromosome Ti/Tv and heterozygosity
+        state.transitions += chr_transitions;
+        state.transversions += chr_transversions;
+        state.per_chr_transitions.insert(chromosome, chr_transitions);
+        state.per_chr_transversions.insert(chromosome, chr_transversions);
+        state.het_count += chr_het_count;
+        state.het_total_called += chr_het_total;
+        state.per_chr_het.insert(chromosome, (chr_het_count, chr_het_total));
 
         // Append to each format
         for format in state.formats.clone() {
@@ -2183,11 +2292,20 @@ impl OutputGenerator {
         // Build visualization summary from accumulated counters
         let mut per_chromosome: Vec<ChromosomeStats> = state.per_chromosome
             .iter()
-            .map(|(&chr, &(total, genotyped, imputed))| ChromosomeStats {
-                chromosome: chr,
-                total,
-                genotyped,
-                imputed,
+            .map(|(&chr, &(total, genotyped, imputed))| {
+                let ti = state.per_chr_transitions.get(&chr).copied().unwrap_or(0);
+                let tv = state.per_chr_transversions.get(&chr).copied().unwrap_or(0);
+                let (het, het_total) = state.per_chr_het.get(&chr).copied().unwrap_or((0, 0));
+                ChromosomeStats {
+                    chromosome: chr,
+                    total,
+                    genotyped,
+                    imputed,
+                    transitions: ti,
+                    transversions: tv,
+                    ti_tv_ratio: if tv > 0 { Some(ti as f64 / tv as f64) } else { None },
+                    heterozygosity_rate: if het_total > 0 { Some(het as f64 / het_total as f64) } else { None },
+                }
             })
             .collect();
         per_chromosome.sort_by_key(|c| c.chromosome);
@@ -2227,6 +2345,25 @@ impl OutputGenerator {
                 genotyped: state.source_genotyped,
                 imputed: state.source_imputed,
                 imputed_low_quality: state.source_low_quality,
+            },
+            ti_tv_ratio: if state.transversions > 0 {
+                Some(state.transitions as f64 / state.transversions as f64)
+            } else {
+                None
+            },
+            heterozygosity_rate: if state.het_total_called > 0 {
+                Some(state.het_count as f64 / state.het_total_called as f64)
+            } else {
+                None
+            },
+            dosage_distribution: DosageDistribution {
+                homozygous_ref: state.dosage_hom_ref,
+                heterozygous: state.dosage_het,
+                homozygous_alt: state.dosage_hom_alt,
+            },
+            variant_types: VariantTypeCounts {
+                snps: state.snp_count,
+                indels: state.indel_count,
             },
         };
 
