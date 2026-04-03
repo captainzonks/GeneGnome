@@ -201,8 +201,8 @@ class ProgressMonitor {
             const duration = this.calculateDuration(data.created_at, data.completed_at);
             this.completionTime.textContent = duration;
 
-            // Calculate expiry time (72 hours from completion)
-            const expiryDate = new Date(completedDate.getTime() + (72 * 60 * 60 * 1000));
+            // Calculate expiry time (24 hours from completion)
+            const expiryDate = new Date(completedDate.getTime() + (24 * 60 * 60 * 1000));
             this.expiryTime.textContent = expiryDate.toLocaleString();
         }
 

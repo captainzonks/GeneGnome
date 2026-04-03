@@ -295,3 +295,6 @@ CLAUDE.md
 !scripts/**/*.sh
 !scripts/**/*.R
 !scripts/**/*.py
+
+# Keep frontend WASM module (required for VCF generator)
+!frontend/www/*.wasm
