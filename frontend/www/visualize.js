@@ -14,23 +14,38 @@ document.addEventListener('DOMContentLoaded', () => {
 // Stored visualization data (set after successful auth)
 let vizData = null;
 
-function getTokenFromURL() {
+function getParamsFromURL() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('token');
+    return {
+        token: params.get('token'),
+        job: params.get('job'),
+    };
 }
 
 function initVisualizePage() {
-    const token = getTokenFromURL();
-
-    if (!token) {
-        showError('Invalid link - no token provided');
-        return;
-    }
-
-    window.vizToken = token;
+    const { token, job } = getParamsFromURL();
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('authForm').style.display = 'block';
+
+    if (token) {
+        // Token-based access (from email link)
+        window.vizMode = 'token';
+        window.vizToken = token;
+    } else if (job) {
+        // Job ID-based access (direct)
+        window.vizMode = 'job';
+        window.vizJobId = job;
+        document.getElementById('authDescription').textContent =
+            'Enter your download password to view visualizations of your processed data.';
+    } else {
+        // No token or job ID — show job ID input field
+        window.vizMode = 'manual';
+        document.getElementById('jobIdGroup').style.display = 'block';
+        document.getElementById('jobIdInput').required = true;
+        document.getElementById('authDescription').textContent =
+            'Enter your Job ID and download password to view your data insights.';
+    }
 
     document.getElementById('passwordForm').addEventListener('submit', handleAuth);
 }
@@ -43,11 +58,28 @@ async function handleAuth(event) {
 
     if (!password) return;
 
+    // Determine job ID for manual mode
+    if (window.vizMode === 'manual') {
+        const jobInput = document.getElementById('jobIdInput').value.trim();
+        if (!jobInput) {
+            document.getElementById('jobIdInput').focus();
+            return;
+        }
+        window.vizJobId = jobInput;
+        window.vizMode = 'job';
+    }
+
     authBtn.disabled = true;
     authBtn.textContent = 'Loading...';
 
     try {
-        const url = `/api/genetics/visualization?token=${encodeURIComponent(window.vizToken)}&password=${encodeURIComponent(password)}`;
+        let url;
+        if (window.vizMode === 'token') {
+            url = `/api/genetics/visualization?token=${encodeURIComponent(window.vizToken)}&password=${encodeURIComponent(password)}`;
+        } else {
+            url = `/api/genetics/jobs/${encodeURIComponent(window.vizJobId)}/visualization?password=${encodeURIComponent(password)}`;
+        }
+
         const response = await fetch(url);
 
         if (!response.ok) {
@@ -73,9 +105,13 @@ async function handleAuth(event) {
         renderSummary(vizData);
         initializeCharts();
 
-        // Set up download link
+        // Set up download link (only if we have a token)
         const downloadLink = document.getElementById('downloadLink');
-        downloadLink.href = `/download?token=${encodeURIComponent(window.vizToken)}`;
+        if (window.vizToken) {
+            downloadLink.href = `/download?token=${encodeURIComponent(window.vizToken)}`;
+        } else {
+            downloadLink.style.display = 'none';
+        }
 
     } catch (error) {
         showError('Failed to load visualization data. Please try again.');
