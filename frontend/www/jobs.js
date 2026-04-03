@@ -170,7 +170,8 @@ class JobLookup {
         const isExpired = data.expires_at && new Date(data.expires_at) < new Date();
 
         if (status === 'completed' && data.has_download && !isExpired) {
-            // Completed with active download: show resend + delete
+            // Completed with active download: show viz link + resend + delete
+            this.showInfo(`<a href="visualize.html?job=${encodeURIComponent(data.job_id)}" style="color: var(--primary-color); font-weight: 600;">View Data Insights →</a> — explore your variant charts and summary statistics.`);
             this.resendSection.classList.remove('hidden');
             this.deleteSection.classList.remove('hidden');
         } else if (status === 'completed' && isExpired) {
@@ -319,7 +320,7 @@ class JobLookup {
     }
 
     showInfo(message) {
-        this.infoMessage.textContent = message;
+        this.infoMessage.innerHTML = message;
         this.infoMessage.classList.remove('hidden');
     }
 

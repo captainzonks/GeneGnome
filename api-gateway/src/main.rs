@@ -90,6 +90,8 @@ fn build_router(state: AppState) -> Router {
         .route("/download", get(handlers::download_results))
         // Visualization data (same auth as download, non-destructive)
         .route("/visualization", get(handlers::get_visualization))
+        // Visualization data via job ID + password (direct access)
+        .route("/jobs/{job_id}/visualization", get(handlers::get_visualization_by_job))
         // Job management (public status, resend email, self-service deletion)
         .route("/jobs/{job_id}/status", get(handlers::get_job_public_status))
         .route("/jobs/{job_id}/resend-email", post(handlers::resend_email))

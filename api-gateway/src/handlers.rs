@@ -21,6 +21,7 @@ use chrono::Utc;
 use futures_util::sink::SinkExt;
 use redis::Commands;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -1236,6 +1237,52 @@ pub async fn get_visualization(
         .ok_or_else(|| AppError::NotFound)?;
 
     info!("Serving visualization data for job {}", validated.id);
+
+    Ok(Json(viz_data))
+}
+
+/// Get visualization data using job_id + password (direct access without email token).
+///
+/// This allows users to access their visualization from the job lookup page
+/// or home page without needing the email download link.
+pub async fn get_visualization_by_job(
+    Path(job_id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let password = params.get("password")
+        .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
+
+    let row: Option<(String, Option<String>, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT status, download_password_hash, metadata
+         FROM genetics.genetics_jobs WHERE id = $1"
+    )
+    .bind(job_id)
+    .fetch_optional(state.db_pool())
+    .await
+    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    let (status, password_hash, metadata) = row.ok_or(AppError::NotFound)?;
+
+    if status != "completed" {
+        return Err(AppError::BadRequest("Job not completed".to_string()));
+    }
+
+    let hash = password_hash
+        .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
+
+    let valid = verify_password(password, &hash)
+        .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
+
+    if !valid {
+        return Err(AppError::BadRequest("Invalid password".to_string()));
+    }
+
+    let viz_data = metadata
+        .and_then(|m| m.get("visualization").cloned())
+        .ok_or_else(|| AppError::NotFound)?;
+
+    info!("Serving visualization data for job {} (direct access)", job_id);
 
     Ok(Json(viz_data))
 }

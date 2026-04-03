@@ -94,14 +94,26 @@
                 </button>
             </div>
 
-            <!-- Password form -->
+            <!-- Auth form (supports token-based from email link, or job ID direct access) -->
             <div id="authForm" class="download-card" style="display: none;">
                 <div class="download-card-header">
                     <h2>View Data Insights</h2>
-                    <p>Enter your password to view visualizations of your processed data</p>
+                    <p id="authDescription">Enter your password to view visualizations of your processed data</p>
                 </div>
 
                 <form id="passwordForm" class="download-card-form">
+                    <div id="jobIdGroup" class="form-group" style="display: none;">
+                        <label for="jobIdInput">Job ID</label>
+                        <input
+                            type="text"
+                            id="jobIdInput"
+                            name="job_id"
+                            placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                            spellcheck="false"
+                            autocomplete="off"
+                            style="font-family: 'Courier New', monospace; font-size: 0.9rem;"
+                        >
+                    </div>
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input
