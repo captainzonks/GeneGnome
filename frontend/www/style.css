@@ -886,7 +886,8 @@ footer a:hover {
     font-size: 1rem;
 }
 
-.form-group input[type="password"] {
+.form-group input[type="password"],
+.form-group input[type="text"] {
     width: 100%;
     padding: 0.875rem 1rem;
     font-size: 1rem;
@@ -899,13 +900,15 @@ footer a:hover {
     letter-spacing: 0.05em;
 }
 
-.form-group input[type="password"]:focus {
+.form-group input[type="password"]:focus,
+.form-group input[type="text"]:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(193, 116, 74, 0.1);
 }
 
-.form-group input[type="password"]::placeholder {
+.form-group input[type="password"]::placeholder,
+.form-group input[type="text"]::placeholder {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: normal;
 }
