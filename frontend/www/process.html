@@ -218,6 +218,37 @@
                 </div>
             </section>
 
+            <!-- Recovery Codes Section (shown after job submission, before processing) -->
+            <section id="recoveryCodesSection" class="recovery-codes-section hidden">
+                <h2>Save Your Recovery Codes</h2>
+                <p class="help-text">These codes let you manage your job and delete your data if needed. Each code can only be used once. <strong>Save them now -- they won't be shown again.</strong></p>
+
+                <div class="info-box info-warning" style="margin-bottom: 1.5rem;">
+                    <p style="margin: 0;">
+                        <strong>Important:</strong> Recovery codes are your backup access to manage this job.
+                        If you lose access to your email, you can use a recovery code to delete your data from the
+                        <a href="jobs.html" style="color: var(--primary-color); font-weight: 600;">Job Lookup</a> page.
+                    </p>
+                </div>
+
+                <div id="codesList" class="recovery-codes-list"></div>
+
+                <div class="recovery-codes-actions">
+                    <button id="copyCodesBtn" class="btn btn-secondary">Copy All Codes</button>
+                    <button id="downloadCodesBtn" class="btn btn-secondary">Download as Text</button>
+                </div>
+
+                <div class="info-box info-blue" style="margin-top: 1rem; font-size: 0.875rem;">
+                    <p style="margin: 0;">
+                        Job ID: <strong id="recoveryJobId">-</strong>
+                    </p>
+                </div>
+
+                <button id="codesSavedBtn" class="btn btn-primary" style="margin-top: 1.5rem; width: 100%;">
+                    I've Saved My Codes -- Continue to Processing
+                </button>
+            </section>
+
             <!-- Processing Section -->
             <section id="processingSection" class="processing-section hidden">
                 <h2>Processing Your Data</h2>
@@ -316,7 +347,7 @@
                         The link expires in 24 hours and can be used up to 5 times.
                     </p>
                     <p style="margin-top: 0.75rem; margin-bottom: 0; font-size: 0.875rem;">
-                        <strong>Didn't receive it?</strong> Check your spam folder or wait a few minutes for delivery.
+                        <strong>Didn't receive it?</strong> Check your spam folder, or use the <a href="jobs.html" style="color: var(--primary-color); font-weight: 600;">Job Lookup</a> page to resend it.
                     </p>
                 </div>
 

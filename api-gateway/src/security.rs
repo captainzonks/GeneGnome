@@ -30,6 +30,15 @@ const PASSWORD_LENGTH: usize = 16;
 /// Password character set (alphanumeric + symbols, excluding ambiguous chars)
 const PASSWORD_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*";
 
+/// Recovery code character set (uppercase alphanumeric, no ambiguous chars)
+const RECOVERY_CODE_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/// Recovery code length in characters (displayed as XXXX-XXXX-XXXX)
+const RECOVERY_CODE_LENGTH: usize = 12;
+
+/// Number of recovery codes generated per job
+pub const RECOVERY_CODE_COUNT: usize = 8;
+
 // ==============================================================================
 // TOKEN GENERATION
 // ==============================================================================
@@ -180,6 +189,53 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 }
 
 // ==============================================================================
+// RECOVERY CODE GENERATION
+// ==============================================================================
+
+/// Generates a single recovery code (12 alphanumeric characters)
+///
+/// Returns a formatted string like "ABCD-1234-EFGH".
+fn generate_recovery_code() -> String {
+    let mut rng = rand::thread_rng();
+    let raw: String = (0..RECOVERY_CODE_LENGTH)
+        .map(|_| {
+            let idx = rng.gen_range(0..RECOVERY_CODE_CHARSET.len());
+            RECOVERY_CODE_CHARSET[idx] as char
+        })
+        .collect();
+
+    format!("{}-{}-{}", &raw[0..4], &raw[4..8], &raw[8..12])
+}
+
+/// Normalizes a recovery code by stripping dashes and uppercasing
+pub fn normalize_recovery_code(code: &str) -> String {
+    code.replace('-', "").to_uppercase()
+}
+
+/// Generates 8 recovery codes with their Argon2id hashes
+///
+/// Returns `(plaintext_formatted_codes, hashed_codes)`.
+/// Plaintext codes are formatted as "XXXX-XXXX-XXXX".
+/// Hashes are computed on the raw 12-char string (no dashes) for flexible input matching.
+///
+/// This function is CPU-intensive (~2.4s for 8 Argon2id hashes) and should be
+/// called via `tokio::task::spawn_blocking`.
+pub fn generate_recovery_codes() -> Result<(Vec<String>, Vec<String>)> {
+    let mut plaintext_codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
+    let mut hashed_codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
+
+    for _ in 0..RECOVERY_CODE_COUNT {
+        let formatted = generate_recovery_code();
+        let raw = normalize_recovery_code(&formatted);
+        let hash = hash_password(&raw)?;
+        plaintext_codes.push(formatted);
+        hashed_codes.push(hash);
+    }
+
+    Ok((plaintext_codes, hashed_codes))
+}
+
+// ==============================================================================
 // TESTS
 // ==============================================================================
 
@@ -261,5 +317,49 @@ mod tests {
     fn test_verify_password_invalid_hash() {
         let result = verify_password("password", "not-a-valid-hash");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_recovery_code_format() {
+        let code = generate_recovery_code();
+
+        // Should be formatted as XXXX-XXXX-XXXX (14 chars with dashes)
+        assert_eq!(code.len(), 14);
+        assert_eq!(&code[4..5], "-");
+        assert_eq!(&code[9..10], "-");
+
+        // Should only contain valid charset + dashes
+        let charset_str = String::from_utf8(RECOVERY_CODE_CHARSET.to_vec()).unwrap();
+        assert!(code.chars().all(|c| c == '-' || charset_str.contains(c)));
+    }
+
+    #[test]
+    fn test_normalize_recovery_code() {
+        assert_eq!(normalize_recovery_code("ABCD-1234-EFGH"), "ABCD1234EFGH");
+        assert_eq!(normalize_recovery_code("abcd-1234-efgh"), "ABCD1234EFGH");
+        assert_eq!(normalize_recovery_code("ABCD1234EFGH"), "ABCD1234EFGH");
+    }
+
+    #[test]
+    fn test_generate_recovery_codes() {
+        let (plaintexts, hashes) = generate_recovery_codes().unwrap();
+
+        assert_eq!(plaintexts.len(), RECOVERY_CODE_COUNT);
+        assert_eq!(hashes.len(), RECOVERY_CODE_COUNT);
+
+        // Each hash should be valid Argon2id
+        for hash in &hashes {
+            assert!(hash.starts_with("$argon2id$"));
+        }
+
+        // Each plaintext code should verify against its hash
+        for (plaintext, hash) in plaintexts.iter().zip(hashes.iter()) {
+            let raw = normalize_recovery_code(plaintext);
+            assert!(verify_password(&raw, hash).unwrap());
+        }
+
+        // All codes should be unique
+        let unique: std::collections::HashSet<_> = plaintexts.iter().collect();
+        assert_eq!(unique.len(), RECOVERY_CODE_COUNT);
     }
 }
