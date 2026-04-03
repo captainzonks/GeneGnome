@@ -233,21 +233,29 @@ body.dark-mode .logo-dark {
 
 /* Header Navigation */
 .header-nav {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0;
 }
 
 .header-nav a {
     color: var(--primary-color);
     text-decoration: none;
     font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
+    font-size: 0.9rem;
     transition: color 0.2s;
 }
 
 .header-nav a:hover {
     color: var(--primary-dark);
+}
+
+.header-nav .nav-sep {
+    color: var(--text-muted, #999);
+    margin: 0 0.5rem;
+    font-size: 0.8rem;
 }
 
 .dark-mode-toggle {
