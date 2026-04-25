@@ -4,11 +4,11 @@
 # Description: PostgreSQL 18 with custom UID/GID for host permissions
 # Author: Matt Barham
 # Created: 2025-11-20
-# Modified: 2026-02-04
-# Version: 18.1-custom
+# Modified: 2026-04-25
+# Version: 18.3-custom
 # Host: Rome (Arch Linux / AMD Ryzen 5600x / Intel Arc A380)
 # ==============================================================================
-# Base Image: postgres:18.1
+# Base Image: postgres:18.3
 # Target Architecture: amd64
 # Security: custom user mapping (UID:1000, GID:968)
 # ==============================================================================
@@ -16,7 +16,7 @@
 #   docker build --build-arg USER_ID=1000 --build-arg GROUP_ID=968 \
 #     --build-arg USERNAME=postgres --build-arg GROUPNAME=postgres \
 #     --build-arg OG_UID=999 --build-arg OG_GID=999 \
-#     -t postgres:18.1-custom .
+#     -t postgres:18.3-custom .
 # Run Command:
 #   See stacks/database/docker-compose.yml for runtime configuration
 # ==============================================================================
@@ -25,7 +25,7 @@
 #   - Ownership transfer from original postgres UID/GID to custom
 # ==============================================================================
 
-FROM postgres:18.1
+FROM postgres:18.3
 
 ARG USER_ID
 ARG GROUP_ID
