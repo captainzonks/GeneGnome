@@ -128,6 +128,8 @@ volumes:
 secrets:
   genetics_db_password:
     file: ${SECRETS_DIR}/genetics/genetics_psql_password
+  genetics_app_db_password:
+    file: ${SECRETS_DIR}/genetics/genetics_app_db_password
   genetics_api_key:
     file: ${SECRETS_DIR}/genetics/genetics_api_key
   genetics_jwt_secret:
@@ -215,11 +217,13 @@ services:
       - POSTGRES_DB=${POSTGRES18_GENETICS_DB}
       - POSTGRES_USER=${POSTGRES18_GENETICS_USER}
       - POSTGRES_PASSWORD_FILE=/run/secrets/genetics_db_password
+      - GENETICS_APP_DB_PASSWORD_FILE=/run/secrets/genetics_app_db_password
 
     volumes:
       - ${GENETICS_ENCRYPTED_DIR}/postgres18-genetics/tablespaces/:/data/tablespaces/:rw
       - ${GENETICS_ENCRYPTED_DIR}/postgres18-genetics/:/var/lib/postgresql/:rw
       - ${LOCALTIME}:/etc/localtime:ro
+      - ./database/00-create-app-role.sh:/docker-entrypoint-initdb.d/00-create-app-role.sh:ro
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
     tmpfs:
@@ -228,6 +232,7 @@ services:
 
     secrets:
       - genetics_db_password
+      - genetics_app_db_password
 
   # ==============================================================================
   # REDIS CACHE/QUEUE
@@ -362,7 +367,7 @@ services:
     # Environment
     environment:
       - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
-      - DATABASE_URL=postgresql://${POSTGRES18_GENETICS_USER}:${POSTGRES_GENETICS_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
+      - DATABASE_URL=postgresql://genetics_app:${POSTGRES_GENETICS_APP_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
       - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
       - ENCRYPTED_VOLUME_PATH=${GENETICS_ENCRYPTED_DIR}
       - SMTP_HOST=${SMTP_HOST}
@@ -454,7 +459,7 @@ services:
 
     environment:
       - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
-      - DATABASE_URL=postgresql://${POSTGRES18_GENETICS_USER}:${POSTGRES_GENETICS_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
+      - DATABASE_URL=postgresql://genetics_app:${POSTGRES_GENETICS_APP_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
       - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
       - ENCRYPTED_VOLUME_PATH=${GENETICS_ENCRYPTED_DIR}
       - SMTP_HOST=${SMTP_HOST}
@@ -556,7 +561,8 @@ services:
 # PREREQUISITES:
 #   1. Create encrypted volume: ${GENETICS_ENCRYPTED_DIR} (LUKS2 AES-256-XTS recommended)
 #   2. Generate secrets in ${SECRETS_DIR}/genetics/:
-#       - genetics_psql_password
+#       - genetics_psql_password (owner/bootstrap role - see docs/adr/0001-rls-role-separation.md)
+#       - genetics_app_db_password (runtime role api-gateway/worker connect as)
 #       - genetics_api_key
 #       - genetics_jwt_secret
 #   3. Generate SMTP secret in ${SECRETS_DIR}/smtp/:

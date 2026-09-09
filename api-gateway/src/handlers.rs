@@ -30,6 +30,8 @@ use uuid::Uuid;
 
 use crate::{
     // PUBLIC PLATFORM: No authentication middleware needed
+    db,
+    error::AppError,
     models::*,
     queue::{JobPayload, JobQueue},
     security::{verify_password, generate_recovery_codes, normalize_recovery_code, hash_password, generate_download_password},
@@ -311,7 +313,10 @@ pub async fn submit_job(
         "vcf_format": vcf_format
     });
 
-    // PUBLIC PLATFORM: Use email as user_id (no RLS/authentication needed)
+    // PUBLIC PLATFORM: no login session - the requester's own email becomes
+    // the row's owner, so it doubles as the RLS context for this insert
+    // rather than being derived from any auth token.
+    let mut tx = db::scoped_tx_for_user(state.db_pool(), &user_email).await?;
     sqlx::query(
         "INSERT INTO genetics_jobs (id, user_id, status, created_at, metadata) VALUES ($1, $2, $3, $4, $5)"
     )
@@ -320,9 +325,12 @@ pub async fn submit_job(
     .bind("pending")
     .bind(created_at)
     .bind(&metadata)
-    .execute(state.db_pool())
+    .execute(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Failed to create job in database: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit job creation: {}", e)))?;
 
     // Generate recovery codes (CPU-intensive: 8 Argon2id hashes)
     let (plaintext_codes, hashed_codes) = tokio::task::spawn_blocking(generate_recovery_codes)
@@ -330,7 +338,8 @@ pub async fn submit_job(
         .map_err(|e| AppError::Internal(format!("Recovery code generation task failed: {}", e)))?
         .map_err(|e| AppError::Internal(format!("Failed to generate recovery codes: {}", e)))?;
 
-    // Store hashed recovery codes in database
+    // Store hashed recovery codes in database (genetics_recovery_codes has no
+    // RLS policy - it's keyed by job_id, not user_id - so no context needed)
     for hash in &hashed_codes {
         sqlx::query(
             "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)"
@@ -383,13 +392,17 @@ pub async fn get_job_status(
     State(state): State<AppState>,
     Path(job_id): Path<Uuid>,
 ) -> Result<Json<JobStatusResponse>, AppError> {
-    // PUBLIC PLATFORM: Anyone with job_id can check status (no authentication required)
-    // Query job from database
+    // PUBLIC PLATFORM: Anyone with job_id can check status (no authentication
+    // required) - job_id is itself the capability. RLS is still enforced as
+    // defense in depth: resolving the owner and scoping the transaction to
+    // it means a bug elsewhere in this handler can't leak another job.
+    let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
+
     let job = sqlx::query_as::<_, (uuid::Uuid, String, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)>(
         "SELECT id, user_id, status, created_at, started_at, completed_at, error_message FROM genetics_jobs WHERE id = $1"
     )
     .bind(job_id)
-    .fetch_optional(state.db_pool())
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
     .ok_or(AppError::NotFound)?;
@@ -417,9 +430,13 @@ pub async fn get_job_status(
         "SELECT DISTINCT LOWER(file_type) FROM genetics_files WHERE job_id = $1 ORDER BY LOWER(file_type)"
     )
     .bind(job_id)
-    .fetch_all(state.db_pool())
+    .fetch_all(&mut *tx)
     .await
     .unwrap_or_default();
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     Ok(Json(JobStatusResponse {
         job_id: job_id_db,
@@ -446,17 +463,25 @@ pub async fn delete_job(
 ) -> Result<StatusCode, AppError> {
     info!("Deleting job {}", job_id);
 
-    // PUBLIC PLATFORM: Anyone with job_id can delete (no authentication required)
-    // Delete from database
+    // PUBLIC PLATFORM: Anyone with job_id can delete (no authentication
+    // required) - job_id is itself the capability. scoped_tx_for_job
+    // resolves the owner and returns NotFound before we ever attempt the
+    // delete if the job doesn't exist.
+    let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
+
     let result = sqlx::query("DELETE FROM genetics_jobs WHERE id = $1")
         .bind(job_id)
-        .execute(state.db_pool())
+        .execute(&mut *tx)
         .await
         .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit deletion: {}", e)))?;
 
     // Delete from Redis
     let job_queue = JobQueue::new(state.redis_client().clone());
@@ -514,11 +539,24 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
 
     // PUBLIC PLATFORM: No authentication required - anyone with job_id can watch progress
     // Query current job status from database and send immediately
-    match sqlx::query_as::<_, (String,)>("SELECT status FROM genetics_jobs WHERE id = $1")
-        .bind(job_id)
-        .fetch_optional(state.db_pool())
-        .await
-    {
+    let status_query: Result<Option<(String,)>, AppError> =
+        match db::scoped_tx_for_job(state.db_pool(), job_id).await {
+            Ok((mut tx, _owner)) => {
+                let result = sqlx::query_as::<_, (String,)>(
+                    "SELECT status FROM genetics_jobs WHERE id = $1",
+                )
+                .bind(job_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| AppError::Internal(format!("Database error: {}", e)));
+                let _ = tx.commit().await;
+                result
+            }
+            Err(AppError::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        };
+
+    match status_query {
         Ok(Some((status,))) => {
             let initial_msg = serde_json::json!({
                 "type": "status",
@@ -542,7 +580,7 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
             return;
         }
         Err(e) => {
-            error!("Failed to query job status: {}", e);
+            error!("Failed to query job status: {:?}", e);
             let error_msg = serde_json::json!({
                 "type": "error",
                 "error": "database_error",
@@ -915,7 +953,9 @@ pub async fn finalize_upload(
         "vcf_format": vcf_format
     });
 
-    // PUBLIC PLATFORM: Use email as user_id (no RLS/authentication needed)
+    // PUBLIC PLATFORM: no login session - the requester's own email becomes
+    // the row's owner, so it doubles as the RLS context for this insert.
+    let mut tx = db::scoped_tx_for_user(state.db_pool(), &user_email).await?;
     sqlx::query(
         "INSERT INTO genetics_jobs (id, user_id, status, created_at, metadata) VALUES ($1, $2, $3, $4, $5)"
     )
@@ -924,9 +964,12 @@ pub async fn finalize_upload(
     .bind("pending")
     .bind(created_at)
     .bind(&metadata)
-    .execute(state.db_pool())
+    .execute(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Failed to create job in database: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit job creation: {}", e)))?;
 
     // Generate recovery codes (CPU-intensive: 8 Argon2id hashes)
     let (plaintext_codes, hashed_codes) = tokio::task::spawn_blocking(generate_recovery_codes)
@@ -1011,6 +1054,7 @@ struct JobDownloadRecord {
 /// Validated job returned after credential verification
 struct ValidatedJob {
     id: Uuid,
+    owner: String,
     result_path: Option<String>,
     metadata: Option<serde_json::Value>,
 }
@@ -1026,6 +1070,11 @@ async fn validate_download_credentials(
 ) -> Result<ValidatedJob, AppError> {
     let client_ip = "unknown".to_string();
 
+    // The token IS the capability here (there's no job_id in this request),
+    // so it has to be resolved to an owner before the real, RLS-restricted
+    // row can be read - same problem as scoped_tx_for_job, different key.
+    let (mut tx, _job_id, owner) = db::scoped_tx_for_token(pool, token).await?;
+
     let job: Option<JobDownloadRecord> = sqlx::query_as(
         r#"
         SELECT id, user_id, status, result_path, metadata, expires_at,
@@ -1036,9 +1085,13 @@ async fn validate_download_credentials(
         "#,
     )
     .bind(token)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let job = job.ok_or(AppError::NotFound)?;
     let job_id = job.id;
@@ -1082,6 +1135,7 @@ async fn validate_download_credentials(
 
     Ok(ValidatedJob {
         id: job_id,
+        owner,
         result_path: job.result_path,
         metadata: job.metadata,
     })
@@ -1106,6 +1160,7 @@ pub async fn download_results(
     let job_id = validated.id;
 
     // Increment download attempts (downloads are destructive -- count them)
+    let mut tx = db::scoped_tx_for_user(state.db_pool(), &validated.owner).await?;
     sqlx::query(
         "UPDATE genetics.genetics_jobs
          SET download_attempts = download_attempts + 1,
@@ -1113,9 +1168,12 @@ pub async fn download_results(
          WHERE id = $1"
     )
     .bind(job_id)
-    .execute(state.db_pool())
+    .execute(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Failed to update attempts: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let client_ip = "unknown".to_string();
     let _ = record_download_attempt(
@@ -1253,14 +1311,20 @@ pub async fn get_visualization_by_job(
     let password = params.get("password")
         .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
 
+    let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
+
     let row: Option<(String, Option<String>, Option<serde_json::Value>)> = sqlx::query_as(
         "SELECT status, download_password_hash, metadata
          FROM genetics.genetics_jobs WHERE id = $1"
     )
     .bind(job_id)
-    .fetch_optional(state.db_pool())
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let (status, password_hash, metadata) = row.ok_or(AppError::NotFound)?;
 
@@ -1296,6 +1360,8 @@ pub async fn get_job_public_status(
     State(state): State<AppState>,
     Path(job_id): Path<Uuid>,
 ) -> Result<Json<JobPublicStatusResponse>, AppError> {
+    let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
+
     let row: Option<(Uuid, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>,
         Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)> =
         sqlx::query_as(
@@ -1303,9 +1369,13 @@ pub async fn get_job_public_status(
              FROM genetics.genetics_jobs WHERE id = $1"
         )
         .bind(job_id)
-        .fetch_optional(state.db_pool())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let (id, status, created_at, started_at, completed_at, expires_at, download_token) =
         row.ok_or(AppError::NotFound)?;
@@ -1331,6 +1401,8 @@ pub async fn resend_email(
     Path(job_id): Path<Uuid>,
 ) -> Result<Json<ResendEmailResponse>, AppError> {
     // Fetch job details
+    let (mut tx, owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
+
     let row: Option<(Uuid, String, Option<String>, Option<String>,
         Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>,
         Option<chrono::DateTime<Utc>>)> =
@@ -1339,9 +1411,13 @@ pub async fn resend_email(
              FROM genetics.genetics_jobs WHERE id = $1"
         )
         .bind(job_id)
-        .fetch_optional(state.db_pool())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let (_id, status, user_email, download_token, completed_at, expires_at, last_resent) =
         row.ok_or(AppError::NotFound)?;
@@ -1385,7 +1461,10 @@ pub async fn resend_email(
         .map_err(|e| AppError::Internal(format!("Password hashing task failed: {}", e)))?
         .map_err(|e| AppError::Internal(format!("Failed to hash password: {}", e)))?;
 
-    // Update credentials and reset attempts
+    // Update credentials and reset attempts. Fresh transaction rather than
+    // reusing the one above - that one is already committed, and we don't
+    // want to hold a transaction open across the SMTP send that follows.
+    let mut tx = db::scoped_tx_for_user(state.db_pool(), &owner).await?;
     sqlx::query(
         "UPDATE genetics.genetics_jobs
          SET download_password_hash = $1, download_attempts = 0,
@@ -1394,9 +1473,12 @@ pub async fn resend_email(
     )
     .bind(&new_hash)
     .bind(job_id)
-    .execute(state.db_pool())
+    .execute(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Failed to update credentials: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     // Send email with existing token + new password
     let completed_at = completed_at.unwrap_or_else(Utc::now);
@@ -1432,13 +1514,17 @@ pub async fn delete_job_with_recovery(
     Json(body): Json<DeleteJobRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Fetch job
+    let (mut tx, owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
     let row: Option<(Uuid, String)> = sqlx::query_as(
         "SELECT id, status FROM genetics.genetics_jobs WHERE id = $1"
     )
     .bind(job_id)
-    .fetch_optional(state.db_pool())
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     let (_id, status) = row.ok_or(AppError::NotFound)?;
 
@@ -1492,13 +1578,17 @@ pub async fn delete_job_with_recovery(
     .map_err(|e| AppError::Internal(format!("Failed to mark recovery code as used: {}", e)))?;
 
     // Mark the job as user_deleted
+    let mut tx = db::scoped_tx_for_user(state.db_pool(), &owner).await?;
     sqlx::query(
         "UPDATE genetics.genetics_jobs SET status = 'user_deleted' WHERE id = $1"
     )
     .bind(job_id)
-    .execute(state.db_pool())
+    .execute(&mut *tx)
     .await
     .map_err(|e| AppError::Internal(format!("Failed to delete job: {}", e)))?;
+    tx.commit()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
     info!("Job {} marked as user_deleted via recovery code", job_id);
 
@@ -1506,30 +1596,4 @@ pub async fn delete_job_with_recovery(
         "success": true,
         "message": "Your data has been scheduled for deletion and will be permanently removed shortly."
     })))
-}
-
-/// Application error type
-#[derive(Debug)]
-pub enum AppError {
-    NotFound,
-    BadRequest(String),
-    Forbidden,
-    Internal(String),
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let (status, error_message) = match self {
-            AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".to_string()),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::Forbidden => (StatusCode::FORBIDDEN, "Access denied".to_string()),
-            AppError::Internal(msg) => {
-                error!("Internal error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
-            }
-        };
-
-        let body = Json(ErrorResponse::new(error_message));
-        (status, body).into_response()
-    }
 }

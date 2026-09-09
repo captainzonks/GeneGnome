@@ -29,6 +29,7 @@ use genetics_processor::processor::{DataSource, MergedVariant};
 use genetics_processor::models::{MultiSampleVariant, SampleData, QualityThreshold as ModelQualityThreshold};
 use genetics_processor::reference_panel::ReferencePanelReader;
 
+use crate::db;
 use crate::queue::{JobQueue, OutputFormat, QualityThreshold};
 
 /// Job processor that executes genetics data merging
@@ -67,14 +68,19 @@ impl JobProcessor {
     async fn get_vcf_format_preference(&self) -> Result<genetics_processor::output::VcfFormat> {
         use genetics_processor::output::VcfFormat;
 
-        // Query database for job metadata
+        // Query database for job metadata (RLS-scoped: this worker already
+        // knows the job's owner from the queue payload, no lookup needed)
+        let mut tx = db::scoped_tx_for_user(&self.db_pool, &self.user_id)
+            .await
+            .context("Failed to open RLS-scoped transaction for job metadata")?;
         let row: Option<(serde_json::Value,)> = sqlx::query_as(
             "SELECT metadata FROM genetics_jobs WHERE id = $1"
         )
         .bind(self.job_id)
-        .fetch_optional(&self.db_pool)
+        .fetch_optional(&mut *tx)
         .await
         .context("Failed to query job metadata")?;
+        tx.commit().await.context("Failed to commit")?;
 
         // Parse VCF format preference from metadata
         if let Some((metadata,)) = row {
@@ -921,6 +927,14 @@ impl JobProcessor {
 
     /// Record output file metadata in database
     async fn record_output_files(&self, output_paths: &HashMap<String, PathBuf>) -> Result<()> {
+        // RLS-scoped: genetics_files has the same isolation policy as
+        // genetics_jobs (see database/init.sql). This insert previously
+        // ran on the bare pool with no transaction/context at all - missed
+        // by the original diagnosis of this bug, found while verifying it.
+        let mut tx = db::scoped_tx_for_user(&self.db_pool, &self.user_id)
+            .await
+            .context("Failed to open RLS-scoped transaction for output file metadata")?;
+
         for (format, path) in output_paths {
             let file_name = path.file_name()
                 .and_then(|n| n.to_str())
@@ -954,10 +968,12 @@ impl JobProcessor {
             .bind(hash_sha256)
             .bind(Utc::now())
             .bind(serde_json::json!({}))
-            .execute(&self.db_pool)
+            .execute(&mut *tx)
             .await
             .context("Failed to record output file metadata")?;
         }
+
+        tx.commit().await.context("Failed to commit output file metadata")?;
 
         Ok(())
     }
