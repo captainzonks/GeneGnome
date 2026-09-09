@@ -24,7 +24,9 @@ use tower_http::{
 };
 use tracing::{info, Level};
 
+mod db;
 mod email;
+mod error;
 mod handlers;
 mod middleware;
 mod models;

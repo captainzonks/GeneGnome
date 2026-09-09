@@ -22,6 +22,7 @@ use tracing::{error, info, warn, Level};
 use uuid::Uuid;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
+mod db;
 mod email;
 mod job_processor;
 mod queue;
@@ -281,23 +282,13 @@ impl Worker {
                                     info!("Email notification sent for job {}", job_id);
 
                                     // Update emailed_at timestamp (with RLS context)
-                                    let mut tx = match self.db_pool.begin().await {
+                                    let mut tx = match db::scoped_tx_for_user(&self.db_pool, &payload.user_id).await {
                                         Ok(tx) => tx,
                                         Err(e) => {
-                                            warn!("Failed to start transaction for emailed_at update: {}", e);
+                                            warn!("Failed to open RLS-scoped transaction for emailed_at update: {}", e);
                                             return Ok(());
                                         }
                                     };
-
-                                    let set_query = format!("SET LOCAL app.current_user_id = '{}'", payload.user_id.replace("'", "''"));
-                                    if let Err(e) = sqlx::query(&set_query)
-                                        .execute(&mut *tx)
-                                        .await
-                                    {
-                                        warn!("Failed to set RLS context for emailed_at: {}", e);
-                                        let _ = tx.rollback().await;
-                                        return Ok(());
-                                    }
 
                                     if let Err(e) = sqlx::query(
                                         "UPDATE genetics.genetics_jobs SET emailed_at = NOW() WHERE id = $1"
@@ -354,15 +345,9 @@ impl Worker {
         let now = Utc::now();
 
         // Use transaction to set RLS context
-        let mut tx = self.db_pool.begin().await
-            .context("Failed to start transaction for job status update")?;
-
-        // Set RLS context (SET command doesn't support placeholders, must use format!)
-        let set_query = format!("SET LOCAL app.current_user_id = '{}'", user_id.replace("'", "''"));
-        sqlx::query(&set_query)
-            .execute(&mut *tx)
+        let mut tx = db::scoped_tx_for_user(&self.db_pool, user_id)
             .await
-            .context("Failed to set RLS context")?;
+            .context("Failed to start transaction for job status update")?;
 
         if status == "processing" {
             sqlx::query(
@@ -508,10 +493,13 @@ impl Worker {
         // Find jobs stuck in processing state for more than 10 minutes
         let cutoff = Utc::now() - chrono::Duration::minutes(10);
 
+        // Legitimate cross-user read: this sweep has to see every user's
+        // stuck jobs, not just one. genetics.list_stuck_jobs is a
+        // SECURITY DEFINER function (bypasses RLS as genetics_owner) that
+        // returns only id/user_id - see
+        // database/migrations/004_separate_runtime_role_from_owner.sql.
         let stuck_jobs: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT id, user_id FROM genetics.genetics_jobs
-             WHERE status = 'processing'
-             AND started_at < $1"
+            "SELECT * FROM genetics.list_stuck_jobs($1)"
         )
         .bind(cutoff)
         .fetch_all(&self.db_pool)
@@ -555,10 +543,11 @@ impl Worker {
         let cutoff = Utc::now() - chrono::Duration::hours(24);
 
         // Find old completed/failed jobs (24h+) and user-deleted jobs (immediate)
+        // Legitimate cross-user read, same reasoning as recover_stuck_jobs
+        // above: genetics.list_jobs_for_cleanup is the SECURITY DEFINER
+        // equivalent for this sweep.
         let old_jobs: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT id, user_id FROM genetics.genetics_jobs
-             WHERE (status IN ('completed', 'failed') AND completed_at < $1)
-                OR status = 'user_deleted'"
+            "SELECT * FROM genetics.list_jobs_for_cleanup($1)"
         )
         .bind(cutoff)
         .fetch_all(&self.db_pool)
@@ -588,24 +577,13 @@ impl Worker {
             }
 
             // Use transaction to set RLS context and delete job
-            let mut tx = match self.db_pool.begin().await {
+            let mut tx = match db::scoped_tx_for_user(&self.db_pool, &user_id).await {
                 Ok(tx) => tx,
                 Err(e) => {
-                    error!("Failed to start transaction for job {}: {}", job_id, e);
+                    error!("Failed to open RLS-scoped transaction for job {}: {}", job_id, e);
                     continue;
                 }
             };
-
-            // Set app.current_user_id for RLS policy (SET doesn't support placeholders)
-            let set_query = format!("SET LOCAL app.current_user_id = '{}'", user_id.replace("'", "''"));
-            if let Err(e) = sqlx::query(&set_query)
-                .execute(&mut *tx)
-                .await
-            {
-                error!("Failed to set RLS context for job {}: {}", job_id, e);
-                let _ = tx.rollback().await;
-                continue;
-            }
 
             // Delete from database
             match sqlx::query("DELETE FROM genetics.genetics_jobs WHERE id = $1")

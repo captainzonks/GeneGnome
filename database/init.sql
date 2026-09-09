@@ -4,9 +4,17 @@
 -- Description: PostgreSQL schema for genetic data processing service
 -- Author: Matt Barham
 -- Created: 2025-10-31
--- Modified: 2025-11-18
--- Version: 1.1.0
--- Security: Row-level security, append-only audit log, token-based downloads
+-- Modified: 2026-09-08
+-- Version: 1.3.0
+-- Security: Row-level security (FORCED, non-owner runtime role), append-only
+--           audit log, token-based downloads. See
+--           docs/adr/0001-rls-role-separation.md and
+--           database/migrations/004_separate_runtime_role_from_owner.sql for
+--           why this schema assumes two distinct roles (genetics_owner,
+--           genetics_app) instead of one. On a fresh deployment,
+--           database/00-create-app-role.sh runs before this file (via
+--           docker-entrypoint-initdb.d ordering) and creates genetics_app;
+--           POSTGRES_USER for a fresh deployment should be genetics_owner.
 -- ==============================================================================
 
 -- Create genetics database schema
@@ -14,6 +22,34 @@ CREATE SCHEMA IF NOT EXISTS genetics;
 
 -- Set search path
 SET search_path TO genetics, public;
+
+-- genetics_owner (POSTGRES_USER, the bootstrap role running this script) is
+-- the table owner for everything below and is PERMANENTLY a superuser -
+-- Postgres refuses to let the bootstrap superuser ever drop SUPERUSER
+-- ("permission denied to alter role ... The bootstrap superuser must have
+-- the SUPERUSER attribute"), confirmed empirically against Postgres 18.3.
+-- That's fine: superuser already implies bypassing row security
+-- unconditionally, so the explicit BYPASSRLS below is redundant in
+-- practice but kept for clarity/documentation. The actual security
+-- boundary was never "genetics_owner isn't superuser" - it's that
+-- genetics_owner's credentials never appear in api-gateway or worker's
+-- DATABASE_URL (see docker-compose.yml). See
+-- docs/adr/0001-rls-role-separation.md.
+--
+-- This only works because a fresh deployment's POSTGRES_USER is
+-- genetics_owner directly (see .env.example) - the role already exists by
+-- the time this script runs. An existing deployment upgrading in place
+-- never re-runs this file (docker-entrypoint-initdb.d only fires on an
+-- empty volume); it gets to the same end state via
+-- database/migrations/004_separate_runtime_role_from_owner.sql instead,
+-- targeting CURRENT_USER rather than the literal name genetics_owner -
+-- Postgres refuses to let a role rename itself, so the older "genetics_api"
+-- bootstrap role is never renamed and keeps that name permanently on an
+-- upgraded deployment (cosmetic difference only, not a security one - see
+-- the migration file for the full explanation).
+ALTER ROLE genetics_owner BYPASSRLS;
+ALTER ROLE genetics_owner SET search_path TO genetics, public;
+ALTER ROLE genetics_app SET search_path TO genetics, public;
 
 -- ==============================================================================
 -- JOBS TABLE
@@ -42,11 +78,12 @@ CREATE INDEX idx_genetics_jobs_status_started_at ON genetics_jobs(status, starte
 
 -- Enable row-level security
 ALTER TABLE genetics_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE genetics_jobs FORCE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own jobs
 CREATE POLICY genetics_jobs_isolation ON genetics_jobs
     FOR ALL
-    TO genetics_api
+    TO genetics_app
     USING (user_id = current_setting('app.current_user_id', TRUE)::TEXT)
     WITH CHECK (user_id = current_setting('app.current_user_id', TRUE)::TEXT);
 
@@ -75,11 +112,12 @@ CREATE INDEX idx_genetics_files_hash ON genetics_files(hash_sha256);
 
 -- Enable row-level security
 ALTER TABLE genetics_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE genetics_files FORCE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own files
 CREATE POLICY genetics_files_isolation ON genetics_files
     FOR ALL
-    TO genetics_api
+    TO genetics_app
     USING (user_id = current_setting('app.current_user_id', TRUE)::TEXT)
     WITH CHECK (user_id = current_setting('app.current_user_id', TRUE)::TEXT);
 
@@ -110,8 +148,7 @@ CREATE INDEX idx_genetics_audit_severity ON genetics_audit(severity);
 CREATE INDEX idx_genetics_audit_details ON genetics_audit USING GIN(details);
 
 -- Grant insert-only access to audit table
-GRANT INSERT ON genetics_audit TO genetics_api;
-REVOKE UPDATE, DELETE ON genetics_audit FROM genetics_api;
+GRANT INSERT ON genetics_audit TO genetics_app;
 
 -- Prevent updates and deletes on audit table (append-only)
 CREATE RULE genetics_audit_no_update AS
@@ -161,6 +198,68 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==============================================================================
+-- CROSS-USER ACCESS FUNCTIONS (SECURITY DEFINER, pinned search_path)
+-- ==============================================================================
+-- Owned by genetics_owner (BYPASSRLS). GeneGnome has no login session -
+-- most api-gateway handlers only ever receive a job_id (itself a bearer
+-- capability), never the owning user's email - so app.current_user_id has
+-- to be resolved from the row before the real, RLS-restricted query can
+-- run. See docs/adr/0001-rls-role-separation.md.
+
+CREATE OR REPLACE FUNCTION genetics.resolve_job_owner(p_job_id UUID)
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = genetics, pg_catalog
+AS $$
+    SELECT user_id FROM genetics.genetics_jobs WHERE id = p_job_id;
+$$;
+
+COMMENT ON FUNCTION genetics.resolve_job_owner(UUID) IS
+    'SECURITY DEFINER (bypasses RLS as genetics_owner). Returns only the owning user_id for a job_id, nothing else. Used to seed app.current_user_id before RLS-scoped queries in api-gateway.';
+
+-- genetics.resolve_job_owner_by_token(TEXT) is NOT defined here: it depends
+-- on the download_token column, which doesn't exist until
+-- migrations/001_add_email_downloads.sql runs. It's defined in
+-- migrations/004_separate_runtime_role_from_owner.sql instead, applied
+-- after 001-003 in the standard replay order (init.sql -> 001 -> 002 ->
+-- 003 -> 004) that both a fresh deployment and an existing one follow.
+
+-- Cross-user sweeps for worker's stuck-job recovery and 24h cleanup loops.
+-- Each returned job is then acted on inside its own RLS-scoped, per-owner
+-- transaction - these functions only replace the initial cross-user
+-- discovery SELECT, not the mutations.
+CREATE OR REPLACE FUNCTION genetics.list_stuck_jobs(p_started_before TIMESTAMPTZ)
+RETURNS TABLE(id UUID, user_id TEXT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = genetics, pg_catalog
+AS $$
+    SELECT id, user_id FROM genetics.genetics_jobs
+    WHERE status = 'processing' AND started_at < p_started_before;
+$$;
+
+COMMENT ON FUNCTION genetics.list_stuck_jobs(TIMESTAMPTZ) IS
+    'SECURITY DEFINER (bypasses RLS as genetics_owner). Cross-user discovery for worker stuck-job recovery; returns only id/user_id, no job content.';
+
+CREATE OR REPLACE FUNCTION genetics.list_jobs_for_cleanup(p_completed_before TIMESTAMPTZ)
+RETURNS TABLE(id UUID, user_id TEXT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = genetics, pg_catalog
+AS $$
+    SELECT id, user_id FROM genetics.genetics_jobs
+    WHERE (status IN ('completed', 'failed') AND completed_at < p_completed_before)
+       OR status = 'user_deleted';
+$$;
+
+COMMENT ON FUNCTION genetics.list_jobs_for_cleanup(TIMESTAMPTZ) IS
+    'SECURITY DEFINER (bypasses RLS as genetics_owner). Cross-user discovery for worker''s 24h job cleanup sweep; returns only id/user_id, no job content.';
+
+-- ==============================================================================
 -- VIEWS
 -- ==============================================================================
 
@@ -197,16 +296,22 @@ ORDER BY timestamp DESC;
 -- GRANTS
 -- ==============================================================================
 
--- Grant necessary permissions to API role
-GRANT USAGE ON SCHEMA genetics TO genetics_api;
-GRANT SELECT, INSERT, UPDATE ON genetics_jobs TO genetics_api;
-GRANT SELECT, INSERT, UPDATE ON genetics_files TO genetics_api;
-GRANT INSERT ON genetics_audit TO genetics_api;
-GRANT SELECT ON genetics_job_stats TO genetics_api;
-GRANT SELECT ON genetics_recent_audit TO genetics_api;
+-- Grant necessary permissions to the runtime role. Re-derived from the
+-- actual query inventory in api-gateway and worker, not a blanket grant -
+-- notably genetics_app does NOT get genetics_job_stats / genetics_recent_audit
+-- / genetics_security_events (ops-only views, queried manually via
+-- genetics_owner, never by application code) and does NOT get DELETE or
+-- SELECT/UPDATE beyond what each table actually needs.
+GRANT USAGE ON SCHEMA genetics TO genetics_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON genetics_jobs TO genetics_app;
+GRANT SELECT, INSERT ON genetics_files TO genetics_app;
+
+GRANT EXECUTE ON FUNCTION genetics.resolve_job_owner(UUID) TO genetics_app;
+GRANT EXECUTE ON FUNCTION genetics.list_stuck_jobs(TIMESTAMPTZ) TO genetics_app;
+GRANT EXECUTE ON FUNCTION genetics.list_jobs_for_cleanup(TIMESTAMPTZ) TO genetics_app;
 
 -- Grant sequence usage
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA genetics TO genetics_api;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA genetics TO genetics_app;
 
 -- ==============================================================================
 -- INITIAL DATA

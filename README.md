@@ -43,7 +43,7 @@ GeneGnome is a self-hosted platform for processing genetic data from direct-to-c
 - **Network Isolation**: Processing containers have zero internet access
 - **Automatic Deletion**: All data permanently deleted after 24 hours
 - **Secure File Wiping**: DoD 5220.22-M compliant overwrite (not just file deletion)
-- **Row-Level Security**: PostgreSQL RLS policies enforce job isolation
+- **Row-Level Security**: PostgreSQL RLS policies enforce job isolation, as a distinct non-superuser, non-owning runtime role (see [`docs/adr/0001-rls-role-separation.md`](docs/adr/0001-rls-role-separation.md) for why this requires more than just writing the policies)
 - **Audit Logging**: All data access and processing events logged
 - **Secure Downloads**: Token-based downloads with password protection and attempt limits
 - **Recovery Codes**: 8 single-use codes per job for self-service data deletion
@@ -171,8 +171,11 @@ Three independent Rust crates (no workspace):
    ```bash
    mkdir -p secrets/genetics secrets/smtp
 
-   # Database password
+   # Database owner/bootstrap password (schema owner, not what the app connects as)
    openssl rand -base64 32 > secrets/genetics/genetics_psql_password
+
+   # Database runtime app password (api-gateway/worker connect as this role)
+   openssl rand -base64 32 > secrets/genetics/genetics_app_db_password
 
    # API authentication key
    openssl rand -base64 32 > secrets/genetics/genetics_api_key
@@ -273,7 +276,7 @@ GeneGnome implements defense-in-depth with multiple security layers:
 
 6. **Recovery Codes** — 8 Argon2id-hashed single-use codes per job. Users can delete their data at any time without email access.
 
-7. **Row-Level Security** — PostgreSQL RLS policies enforce job isolation at the database level.
+7. **Row-Level Security** — PostgreSQL RLS policies enforce job isolation at the database level. `api-gateway` and `worker` connect as `genetics_app`, a runtime role that is neither a superuser nor the schema owner and cannot bypass these policies (see [ADR 0001](docs/adr/0001-rls-role-separation.md)).
 
 8. **Container Hardening** — Non-root users (UID 3000), capability dropping (CAP_DROP ALL), resource limits.
 
