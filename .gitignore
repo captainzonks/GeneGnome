@@ -298,3 +298,11 @@ CLAUDE.md
 
 # Keep frontend WASM module (required for VCF generator)
 !frontend/www/*.wasm
+
+# Local / private script inputs (server-specific: known log patterns, etc.).
+# Not for public release. Drop any such file under scripts/local/.
+scripts/local/
+
+# Local / private docs (server-specific: live IP references, runbooks, secret
+# layouts). Not for public release. Drop any such doc under docs/local/.
+docs/local/
