@@ -116,6 +116,22 @@ async fn main() -> Result<()> {
     worker.run().await
 }
 
+/// Validates a chunked-upload session id before it is used to build a
+/// filesystem path (uploads/chunks/{upload_session_id}). The API gateway
+/// already validates this on the way in, but the worker reads it back off
+/// its own queue payload and must not assume that payload is trustworthy.
+fn validate_upload_session_id(id: &str) -> Result<()> {
+    if id.is_empty() || id.len() > 128 {
+        anyhow::bail!("Invalid upload_session_id length");
+    }
+
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        anyhow::bail!("upload_session_id contains invalid characters");
+    }
+
+    Ok(())
+}
+
 /// Main worker struct
 #[derive(Clone)]
 struct Worker {
@@ -178,6 +194,9 @@ impl Worker {
         let upload_dir = PathBuf::from(&payload.upload_dir);
         if payload.chunked_upload {
             if let Some(upload_session_id) = &payload.upload_session_id {
+                validate_upload_session_id(upload_session_id)
+                    .context("Invalid upload_session_id in job payload")?;
+
                 info!("Reassembling chunked upload for job {}", job_id);
                 self.publish_progress(job_id, 0.0, "Assembling uploaded files").await?;
 

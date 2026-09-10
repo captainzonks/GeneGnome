@@ -596,28 +596,34 @@ class GeneticsUploader {
         }
 
         try {
-            // Show confirmation modal
+            // Show confirmation modal (results already exist at this point,
+            // so deletion requires one of the recovery codes shown at
+            // upload time - the same proof-of-ownership as viewing results,
+            // rather than job_id alone).
             console.log('Showing confirmation modal...');
-            const confirmed = await this.showDeleteConfirmation();
-            console.log('Confirmation result:', confirmed);
+            const recoveryCode = await this.showDeleteConfirmation();
+            console.log('Confirmation result:', recoveryCode ? 'code entered' : 'cancelled');
 
-            if (!confirmed) {
+            if (!recoveryCode) {
                 console.log('Delete cancelled by user');
                 return;
             }
 
-            console.log('Sending DELETE request to:', `${this.API_BASE}/api/genetics/jobs/${this.currentJobId}`);
-            const response = await fetch(`${this.API_BASE}/api/genetics/jobs/${this.currentJobId}`, {
-                method: 'DELETE',
-                credentials: 'include'
+            console.log('Sending recovery-code delete request for job:', this.currentJobId);
+            const response = await fetch(`${this.API_BASE}/api/genetics/jobs/${this.currentJobId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recovery_code: recoveryCode }),
             });
 
-            console.log('DELETE response status:', response.status, response.statusText);
+            console.log('Delete response status:', response.status, response.statusText);
 
             if (response.ok) {
                 console.log('Delete successful, showing success toast');
                 this.showSuccessToast('Job deleted successfully', 'All data and results have been permanently removed.');
                 this.resetForNewJob();
+            } else if (response.status === 403) {
+                this.showErrorToast('Invalid recovery code', 'Check the code from your upload confirmation and try again.');
             } else {
                 const errorText = await response.text();
                 console.error('Delete failed with status:', response.status, errorText);
@@ -650,6 +656,15 @@ class GeneticsUploader {
                             <li>All processed results (Parquet, SQLite, VCF)</li>
                             <li>Job metadata and history</li>
                         </ul>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label for="deleteRecoveryCode">Recovery code</label>
+                            <input
+                                type="text"
+                                id="deleteRecoveryCode"
+                                placeholder="Enter a recovery code from your upload confirmation"
+                                autocomplete="off"
+                            >
+                        </div>
                     </div>
                     <div class="confirmation-actions">
                         <button class="btn btn-secondary cancel-btn">Cancel</button>
@@ -663,6 +678,7 @@ class GeneticsUploader {
             // Handle button clicks
             const cancelBtn = modal.querySelector('.cancel-btn');
             const confirmBtn = modal.querySelector('.confirm-btn');
+            const codeInput = modal.querySelector('#deleteRecoveryCode');
 
             const cleanup = () => {
                 modal.classList.add('closing');
@@ -671,19 +687,24 @@ class GeneticsUploader {
 
             cancelBtn.addEventListener('click', () => {
                 cleanup();
-                resolve(false);
+                resolve(null);
             });
 
             confirmBtn.addEventListener('click', () => {
+                const code = codeInput.value.trim();
+                if (!code) {
+                    codeInput.focus();
+                    return;
+                }
                 cleanup();
-                resolve(true);
+                resolve(code);
             });
 
             // Close on overlay click
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     cleanup();
-                    resolve(false);
+                    resolve(null);
                 }
             });
 

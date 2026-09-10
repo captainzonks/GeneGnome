@@ -469,6 +469,25 @@ pub async fn delete_job(
     // delete if the job doesn't exist.
     let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
+    // Once a job has completed, its results are protected by a download
+    // password - bare job_id knowledge should not outrank that password
+    // for destroying the results too. Jobs that never reached "completed"
+    // (queued/processing/failed) have no results yet, so job_id-only
+    // deletion remains fine there (this is what the browser's own
+    // auto-cleanup-on-failure flow relies on).
+    let status: String = sqlx::query_scalar("SELECT status FROM genetics_jobs WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    if status == "completed" {
+        return Err(AppError::BadRequest(
+            "Completed jobs require recovery-code deletion via POST /jobs/{job_id}/delete"
+                .to_string(),
+        ));
+    }
+
     let result = sqlx::query("DELETE FROM genetics_jobs WHERE id = $1")
         .bind(job_id)
         .execute(&mut *tx)
@@ -771,9 +790,15 @@ pub async fn upload_chunk(
     let total_chunks = total_chunks.ok_or_else(|| AppError::BadRequest("Missing total_chunks".to_string()))?;
     let chunk_data = chunk_data.ok_or_else(|| AppError::BadRequest("Missing chunk data".to_string()))?;
 
-    // SECURITY: Validate chunk before writing to disk
+    // SECURITY: upload_id becomes a path component below - reject anything
+    // that isn't a plain alnum/underscore/hyphen token before it touches disk.
+    validator.validate_upload_id(&upload_id)
+        .map_err(|e| AppError::BadRequest(format!("Invalid upload_id: {}", e)))?;
+
+    // SECURITY: Validate chunk before writing to disk. The sanitized name
+    // (not the raw `filename`) is what actually gets written to disk below.
     let chunk_bytes = axum::body::Bytes::from(chunk_data.clone());
-    validator.validate_chunk(&filename, &chunk_bytes, chunk_index, total_chunks)
+    let safe_filename = validator.validate_chunk(&filename, &chunk_bytes, chunk_index, total_chunks)
         .map_err(|e| AppError::BadRequest(format!("Invalid chunk: {}", e)))?;
 
     info!("Chunk validated: {} ({}/{}, {} bytes)", filename, chunk_index + 1, total_chunks, chunk_data.len());
@@ -785,7 +810,7 @@ pub async fn upload_chunk(
         .map_err(|e| AppError::Internal(format!("Failed to create upload session directory: {}", e)))?;
 
     // Save chunk to disk
-    let chunk_filename = format!("{}_{:04}", filename, chunk_index);
+    let chunk_filename = format!("{}_{:04}", safe_filename, chunk_index);
     let chunk_path = upload_session_dir.join(&chunk_filename);
 
     let mut file = tokio::fs::File::create(&chunk_path)
@@ -920,6 +945,11 @@ pub async fn finalize_upload(
     }
 
     let upload_id = upload_id.ok_or_else(|| AppError::BadRequest("Missing upload_id".to_string()))?;
+
+    // SECURITY: upload_id becomes a path component below - reject anything
+    // that isn't a plain alnum/underscore/hyphen token before it touches disk.
+    FileValidator::new().validate_upload_id(&upload_id)
+        .map_err(|e| AppError::BadRequest(format!("Invalid upload_id: {}", e)))?;
 
     // PUBLIC PLATFORM: Require email for job ownership and notifications
     let user_email = user_email
