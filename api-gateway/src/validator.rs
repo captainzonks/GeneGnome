@@ -267,14 +267,16 @@ impl FileValidator {
         format!("{:x}", hasher.finalize())
     }
 
-    /// Quick validation for chunked uploads (less strict, worker will re-validate)
+    /// Quick validation for chunked uploads (less strict, worker will re-validate).
+    /// Returns the sanitized filename - callers must use this, not the raw
+    /// `filename` argument, when building any on-disk path.
     pub fn validate_chunk(
         &self,
         filename: &str,
         chunk_data: &Bytes,
         chunk_index: usize,
         total_chunks: usize,
-    ) -> Result<()> {
+    ) -> Result<String> {
         // 1. Size check
         if chunk_data.len() > MAX_CHUNK_SIZE {
             anyhow::bail!(
@@ -285,7 +287,7 @@ impl FileValidator {
         }
 
         // 2. Filename sanitization
-        let _safe_name = self.sanitize_filename(filename)?;
+        let safe_name = self.sanitize_filename(filename)?;
 
         // 3. Chunk index validation
         if chunk_index >= total_chunks {
@@ -302,6 +304,26 @@ impl FileValidator {
                 "Too many chunks: {} (max: 100)",
                 total_chunks
             );
+        }
+
+        Ok(safe_name)
+    }
+
+    /// Validates a client-supplied chunked-upload session id before it is
+    /// ever used to build a filesystem path (uploads/chunks/{upload_id}).
+    /// Rejects rather than rewrites - the same id string must match across
+    /// every chunk request and the finalize request, so silently mutating
+    /// it here would break that correlation.
+    pub fn validate_upload_id(&self, upload_id: &str) -> Result<()> {
+        if upload_id.is_empty() || upload_id.len() > 128 {
+            anyhow::bail!("Invalid upload_id length");
+        }
+
+        if !upload_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            anyhow::bail!("upload_id contains invalid characters");
         }
 
         Ok(())
