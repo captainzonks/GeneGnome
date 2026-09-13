@@ -66,14 +66,19 @@ load. Every page that loads `mathjax-tex-mml-chtml.js` must load
 file rather than an inline `<script>` per page, so a future page that adds
 MathJax doesn't silently reopen this CDN egress by forgetting the config.
 
-This is defense at the config level, not the network level — nothing stops
-a page from loading the MathJax bundle without `mathjax_config.js` and
-getting the CDN calls back. If that matters more than the current setup, a
-CSP `connect-src`/`script-src` restricted to `'self'` would enforce it at
-the browser level instead of relying on every page remembering to include
-the config script; that's a larger change (auditing every inline
-`style="..."` attribute and WASM's `wasm-unsafe-eval` requirement first) and
-wasn't done here.
+The config alone is defense at the config level, not the network level —
+nothing stops a page from loading the MathJax bundle without
+`mathjax_config.js` and getting the CDN calls back. The backstop for that is
+the Content-Security-Policy in [`frontend/nginx.conf`](../../nginx.conf),
+which restricts `script-src`/`connect-src` to `'self'` and so blocks the SRE
+fetch regardless of whether a page remembered the config script.
+
+That policy currently ships as `Content-Security-Policy-Report-Only`, which
+logs violations without blocking them — so today it is a detection
+mechanism, not an enforcement one. Promoting it to an enforcing
+`Content-Security-Policy` header is the remaining step, and is gated on
+confirming the browser console reports clean across every page against a
+live deployment.
 
 If MathJax's accessibility features are wanted in the future, vendor the SRE
 package chain at that point rather than re-enabling this against the CDN.
