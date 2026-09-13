@@ -13,19 +13,7 @@
   <link rel="stylesheet" href="results-example.css?v=20251202_10">
   <script src="vendor/chart.umd.min.js"></script>
   <script src="vendor/chartjs-plugin-annotation.min.js"></script>
-  <script>
-    // Disable the Accessibility/Explorer menu item: activating it lazy-loads
-    // speech-rule-engine and its language data from cdn.jsdelivr.net, which
-    // is the one part of MathJax's bundle that can't be vendored locally
-    // (see frontend/www/vendor/README.md). Everything else in this page's
-    // scripts is local and this keeps it that way.
-    window.MathJax = {
-      options: {
-        enableExplorer: false,
-        enableEnrichment: false
-      }
-    };
-  </script>
+  <script src="vendor/mathjax_config.js"></script>
   <script id="MathJax-script" async src="vendor/mathjax-tex-mml-chtml.js"></script>
 </head>
 
