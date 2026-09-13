@@ -248,6 +248,10 @@ CLAUDE.md
 # Output files (results from processing)
 results/
 output/
+# Exception: vendored MathJax CHTML fonts, resolved by MathJax at a fixed
+# relative path from its own script location - not a processing output dir.
+!frontend/www/vendor/output/
+!frontend/www/vendor/output/**
 *.parquet
 *.arrow
 *.feather
