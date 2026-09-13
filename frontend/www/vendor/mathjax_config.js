@@ -1,4 +1,14 @@
-// MathJax configuration shared by every page that loads vendor/mathjax-tex-mml-chtml.js.
+// ==============================================================================
+// mathjax_config.js - Shared MathJax Configuration
+// ==============================================================================
+// Description: Disables MathJax's Explorer/enrichment features to prevent
+//              runtime CDN fetches; loaded before the vendored MathJax bundle
+// Author: Matt Barham
+// Created: 2026-09-13
+// Version: 1.0.0
+// ==============================================================================
+
+// Shared by every page that loads vendor/mathjax-tex-mml-chtml.js.
 // Load this script BEFORE the MathJax bundle itself.
 //
 // Disables the Accessibility/Explorer feature: activating it lazy-loads
