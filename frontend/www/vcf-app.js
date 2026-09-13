@@ -550,11 +550,13 @@ downloadBatchVcfButton.addEventListener('click', async () => {
         // BGZF is not available in browsers, so we'll provide uncompressed VCFs
         // Users can compress with bgzip locally if needed: bgzip file.vcf
         // Vendored locally (vendor/jszip.min.js) so batch export works fully offline.
-        if (typeof JSZip === 'undefined') {
+        // Accessed via window.JSZip (rather than the bare global) since this is a
+        // module script and JSZip is attached by a separate classic <script> tag.
+        if (typeof window.JSZip === 'undefined') {
             throw new Error('JSZip failed to load — check that vendor/jszip.min.js is present');
         }
 
-        const zip = new JSZip();
+        const zip = new window.JSZip();
 
         // Get sample name for filename (sanitize for filesystem safety)
         const sampleName = (vcfSampleName.value.trim() || 'mygenome').replace(/[^a-zA-Z0-9_-]/g, '_');
