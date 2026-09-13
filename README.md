@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-09-13
-Version: 1.3.0
+Version: 1.3.1
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -62,6 +62,16 @@ desktop. See [Performance](#performance) for what was measured and how.
 - **Encrypted storage** — LUKS AES-256-XTS volume for all genetic data
 - **Network isolation** — the worker runs on a Docker network declared
   `internal: true` and has no route off-host
+- **No third-party network calls from the frontend** — every script the
+  frontend loads (JSZip, Chart.js, chartjs-plugin-annotation, MathJax, and
+  its CHTML fonts) is vendored under `frontend/www/vendor/` rather than
+  pulled from a CDN at runtime; see
+  [`frontend/www/vendor/README.md`](frontend/www/vendor/README.md) for
+  version and checksum provenance. One narrow exception: MathJax's optional
+  Explorer accessibility feature (speech/braille output, off by default and
+  disabled in config) would call out to `cdn.jsdelivr.net` for
+  `speech-rule-engine` data if re-enabled — vendoring that dependency chain
+  was out of scope.
 - **Automatic deletion** — results removed 24 hours after completion by an
   hourly cleanup loop
 - **Secure file wiping** — input files overwritten with the DoD 5220.22-M
@@ -427,6 +437,7 @@ point-in-time record of that investigation, not as current output.
 | [docs/platform_architecture.md](docs/platform_architecture.md) | Platform architecture detail |
 | [docs/email_credential_security_design.md](docs/email_credential_security_design.md) | Email credential handling |
 | [app/docs/vcf_parser_benchmark.md](app/docs/vcf_parser_benchmark.md) | Parser selection and timings |
+| [frontend/www/vendor/README.md](frontend/www/vendor/README.md) | Vendored frontend asset provenance (versions, licenses, checksums) |
 
 Point-in-time records, kept for history and not maintained:
 [docs/CHANGELOG_2025-11-12.md](docs/CHANGELOG_2025-11-12.md),
