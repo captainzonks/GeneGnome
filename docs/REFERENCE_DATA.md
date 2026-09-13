@@ -1,5 +1,22 @@
 # Reference Data Guide
 
+<!--
+==============================================================================
+REFERENCE_DATA.md - Reference panel provenance and preparation
+==============================================================================
+Description: Where GeneGnome's reference panels come from, how each one is
+             prepared, and which component consumes it
+Author: Matt Barham
+Created: 2025-11-22
+Modified: 2026-09-13
+Version: 1.1.0
+==============================================================================
+Document Type: Reference
+Audience: Developer, Operator
+Status: Active
+==============================================================================
+-->
+
 This document explains the reference databases used by GeneGnome, where to obtain them, and how to prepare them for use.
 
 ## Overview
@@ -64,9 +81,21 @@ str(chr1)
 
 ### Usage in GeneGnome
 
-This reference panel is **currently NOT used** by the Rust-based GeneGnome processor. It was used by the original R script (`vcf_gen.R`) to generate VCF files for Michigan Imputation Server submission.
+This panel is the source data for the **browser-based VCF generator**, which is implemented and in use.
 
-**For the WebAssembly VCF generator**: We would need to convert this RData file to a WASM-compatible format (JSON, SQLite, or embedded in the binary). This is a **future enhancement** not yet implemented.
+It is not read at runtime in its `.RData` form. It is pre-converted into `reference_db.bin.br` — a Brotli-compressed binary database, 8.4 MB, committed at `frontend/www/reference_db.bin.br` — which `stisty_wasm_bg.wasm` loads in the browser through `load_reference_database()`. See `frontend/www/vcf-app.js`.
+
+With the database loaded, `generate_vcf_with_reference()` and `generate_batch_vcf_with_reference()` emit **51-sample VCFs** (50 reference samples plus the user's genotypes) with REF/ALT alleles taken from the GRCh37 reference rather than inferred from the 23andMe call. Output filenames follow the original R script's convention: `B.{name}_merged_51samples_chr{N}.vcf`.
+
+If the database fails to load, `vcf-app.js` falls back to `generate_vcf()`, which produces a VCF without reference alleles. That fallback output is **not** suitable for submission to Michigan Imputation Server.
+
+The original R script (`vcf_gen.R`) used this panel for the same purpose. The Rust **server-side** processor does not use it — server-side merging reads the imputed panel described in section 2.
+
+#### Regenerating the browser database
+
+**No script in this repository produces `reference_db.bin.br`.** The conversion happens in the `stisty_wasm` build, which is not vendored here; only the built artifacts (`stisty_wasm.js`, `stisty_wasm_bg.wasm`, `reference_db.bin.br`) are committed. Vendor or document that build step before depending on being able to rebuild the panel.
+
+End users deploying GeneGnome do **not** need to download `genotyped.anon.RData` — the browser database ships with the frontend. The download under *Download Location* above is only needed to rebuild it.
 
 ---
 
@@ -402,16 +431,20 @@ Rscript convert_reference_to_db.R
 
 ---
 
-## 10. Future Enhancements
+## 10. Roadmap
 
-Planned improvements for reference data handling:
+### Done
 
-1. **Pre-converted databases**: Provide `reference_panel.db` for direct download (avoid R dependency)
-2. **WASM integration**: Convert `genotyped.anon.RData` to JSON/SQLite for browser VCF generator
-3. **Additional panels**: Support for 1000 Genomes, TOPMed, gnomAD reference data
-4. **Compression**: Add optional Brotli/Zstd compression for smaller downloads
-5. **Checksums**: SHA256 hashes for download verification
-6. **Mirror hosting**: Set up redundant mirrors for reliability
+- **WASM integration** — `genotyped.anon.RData` is converted to a binary database consumed by the browser VCF generator. See section 1.
+- **Compression** — that database ships Brotli-compressed (`reference_db.bin.br`, 8.4 MB).
+
+### Still open
+
+1. **Pre-converted imputed database**: provide `reference_panel.db` for direct download, removing the R dependency from deployment
+2. **Additional panels**: 1000 Genomes, TOPMed, gnomAD
+3. **Checksums**: SHA256 hashes for download verification
+4. **Mirror hosting**: redundant mirrors
+5. **In-repo build for `reference_db.bin.br`**: vendor or document the `stisty_wasm` conversion step so the browser database can be rebuilt from this repository
 
 ---
 
@@ -424,6 +457,6 @@ Planned improvements for reference data handling:
 
 ---
 
-**Last Updated**: 2025-11-20
+**Last Updated**: 2026-09-13
 **Author**: Matthew Barham
 **License**: Apache-2.0 OR MIT

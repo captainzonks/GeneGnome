@@ -1,6 +1,23 @@
 # GeneGnome
 
-**Secure, high-performance genetic data processing platform**
+<!--
+==============================================================================
+README.md - GeneGnome project overview
+==============================================================================
+Description: Overview, architecture, deployment, security model, and measured
+             performance for the GeneGnome genetic data processing platform
+Author: Matt Barham
+Created: 2025-11-22
+Modified: 2026-09-13
+Version: 1.3.0
+==============================================================================
+Document Type: Reference
+Audience: Developer, Operator
+Status: Active
+==============================================================================
+-->
+
+**Self-hosted genetic data processing platform**
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
@@ -9,74 +26,99 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21U3S1R)
 
-> Process and analyze genetic data with enterprise-grade security, privacy-first design, and blazing-fast performance.
+> Merge 23andMe raw data with imputation server results on your own hardware,
+> with encrypted storage and automatic data expiry.
 
 ---
 
 ## Overview
 
-GeneGnome is a self-hosted platform for processing genetic data from direct-to-consumer services (like 23andMe) and imputation servers (like Michigan Imputation Server). Built with Rust for maximum performance and memory safety, it provides:
+GeneGnome processes genetic data from direct-to-consumer services (23andMe)
+and imputation servers (Michigan Imputation Server). It is written in Rust,
+deployed with Docker Compose, and designed to run on infrastructure you
+control.
 
-- **60x faster processing** than traditional R-based pipelines
-- **Multi-format output** (Parquet, VCF, SQLite) for downstream analysis
-- **Browser-based VCF generation** via WebAssembly (no upload required)
-- **Defense-in-depth security** with LUKS-encrypted storage and automatic data deletion
-- **Self-hosted control** over your most sensitive data
+- Merges a 23andMe export with Michigan Imputation Server output against a
+  50-sample reference panel
+- Generates the multi-sample VCF that Michigan requires, in the browser via
+  WebAssembly — that step involves no upload
+- Writes Parquet, VCF, and SQLite for downstream analysis
+- Stores all genetic data on a LUKS AES-256-XTS volume and deletes it after
+  24 hours
+- Delivers results through a rate-limited, token-gated download endpoint
 
-### What Can GeneGnome Do?
+A full 6M-variant, 51-sample merge takes roughly two minutes on a 6-core
+desktop. See [Performance](#performance) for what was measured and how.
 
-- Merge 23andMe raw data with Michigan Imputation Server results
-- Generate VCF files directly in your browser (no upload required)
-- Process up to 6 million variants across 51 samples in ~2 minutes
-- Deliver results via secure, password-protected email download links
-- Provide self-service data management with recovery codes
-- Visualize processed data with interactive charts (allele frequency, imputation quality, Ti/Tv ratio, heterozygosity, dosage distribution, variant types, per-chromosome breakdowns)
-- Automatically clean up all data after 24 hours
+**Scope:** autosomes 1–22, GRCh37/hg19, fixed 51-sample merge model. See
+[Limitations](#limitations) before deploying.
 
 ---
 
-## Key Features
+## Features
 
-### Security First
+### Security
 
-- **Encrypted Storage**: LUKS AES-256-XTS encrypted volumes for all genetic data
-- **Network Isolation**: Processing containers have zero internet access
-- **Automatic Deletion**: All data permanently deleted after 24 hours
-- **Secure File Wiping**: DoD 5220.22-M compliant overwrite (not just file deletion)
-- **Row-Level Security**: PostgreSQL RLS policies enforce job isolation, as a distinct non-superuser, non-owning runtime role (see [`docs/adr/0001-rls-role-separation.md`](docs/adr/0001-rls-role-separation.md) for why this requires more than just writing the policies)
-- **Audit Logging**: All data access and processing events logged
-- **Secure Downloads**: Token-based downloads with password protection and attempt limits
-- **Recovery Codes**: 8 single-use codes per job for self-service data deletion
+- **Encrypted storage** — LUKS AES-256-XTS volume for all genetic data
+- **Network isolation** — the worker runs on a Docker network declared
+  `internal: true` and has no route off-host
+- **Automatic deletion** — results removed 24 hours after completion by an
+  hourly cleanup loop
+- **Secure file wiping** — input files overwritten with the DoD 5220.22-M
+  7-pass pattern, not unlinked
+- **Row-level security** — `api-gateway` and `worker` connect as
+  `genetics_app`, a role that is neither superuser nor schema owner, so the
+  isolation policies actually evaluate. This was not true before
+  [ADR 0001](docs/adr/0001-rls-role-separation.md); that document explains
+  why writing correct policy SQL was not sufficient, and
+  `api-gateway/tests/rls_enforcement.rs` is the integration test that proves
+  the current behaviour against a live connection.
+- **Download gating** — single-use token plus password, maximum five attempts,
+  token expires with the job
+- **Recovery codes** — eight Argon2id-hashed single-use codes per job, for
+  deletion without email access
+- **Container hardening** — non-root (UID 3000), `cap_drop: ALL`, per-service
+  memory and CPU limits
+- **Audit logging** — data access and processing events written to an
+  append-only table
 
-### High Performance
+Full policy in [PRIVACY.md](PRIVACY.md).
 
-- **Rust-Powered**: Memory-safe, zero-cost abstractions, concurrent processing
-- **60x Faster**: ~2 minutes vs ~2 hours for traditional R script processing
-- **Streaming Architecture**: Process datasets larger than available RAM
-- **Efficient Formats**: Apache Parquet for analytics, SQLite for portability
+### Processing
 
-### User Experience
+- **Streaming output on the worker path** — Parquet written in 10,000-row
+  batches per chromosome (`app/src/output.rs`, invoked from
+  `worker/src/job_processor.rs` via `initialize_streaming_output`/
+  `finalize_streaming_output`), so peak memory does not scale with dataset
+  size. The in-process library path (`app/src/processor.rs`) accumulates
+  merged chromosomes in memory instead; use the worker for full-size
+  datasets.
+- **Strand-flip handling** — reverse-complement fallback on allele mismatch,
+  with unit tests (`app/src/genotype_converter.rs`)
+- **Quality filtering** — configurable DR2 threshold during VCF parsing
+- **Concurrent jobs** — each dequeued job is spawned as its own Tokio task.
+  There is no concurrency cap; bound it with container resource limits.
 
-- **Email Notifications**: Secure download link with password sent on completion
-- **Recovery Codes**: Delete your data anytime without email access
-- **Job Lookup**: Check status, resend email, or delete data via job ID
-- **Data Visualization**: Interactive charts for allele frequency, Ti/Tv ratio, heterozygosity, dosage distribution, and variant types
-- **WebSocket Progress**: Real-time processing updates in the browser
-- **Chunked Upload**: Large file support (>50MB) bypassing CDN limits
+### Interface
 
-### Self-Hosted
+- WebSocket progress stream during processing
+- Chunked upload for files over 50MB, bypassing CDN body limits
+- Email notification with download link and password on completion
+- Job lookup: status, email resend, self-service deletion
+- Visualization dashboard: allele frequency, imputation quality, Ti/Tv ratio,
+  heterozygosity, dosage distribution, variant types, per-chromosome counts
 
-- **Your Infrastructure**: Keep sensitive genetic data on your own servers
-- **No Cloud Dependencies**: Fully air-gapped processing possible
-- **Docker Compose**: Single-command deployment
-- **Reverse Proxy Ready**: Works with Traefik, Nginx, Caddy, etc.
-- **Spoke Compatible**: Integrates as an external module in the [Spoke](https://github.com/captainzonks/spoke) platform
+### Deployment
+
+- Docker Compose, single command after setup
+- Works behind Traefik, Nginx, or Caddy
+- Integrates as an external module in the
+  [Spoke](https://github.com/captainzonks/spoke) platform, and runs standalone
+  without it
 
 ---
 
 ## Architecture
-
-GeneGnome uses a microservices architecture with defense-in-depth security:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -84,8 +126,8 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
 └────────────────────────────┬────────────────────────────────────┘
                              │
                     ┌────────▼────────┐
-                    │ Reverse Proxy   │ ← SSL/TLS Termination
-                    │ (Traefik/Nginx) │ ← Rate Limiting
+                    │ Reverse Proxy   │ ← TLS termination
+                    │ (Traefik/Nginx) │ ← rate limiting
                     └────────┬────────┘
                              │
         ┌────────────────────┼────────────────────┐
@@ -93,7 +135,12 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
    ┌────▼─────┐      ┌──────▼──────┐      ┌─────▼──────┐
    │ Frontend │      │ API Gateway │      │  Download  │
    │ (Nginx)  │      │   (Axum)    │      │  Endpoint  │
+   │  + WASM  │      │             │      │            │
    └──────────┘      └──────┬──────┘      └────────────┘
+                             │
+══════════════════════════════════════════════════════════════════
+   internal: true — no route to any external network below here
+══════════════════════════════════════════════════════════════════
                              │
                     ┌────────▼────────┐
                     │   Job Queue     │
@@ -101,8 +148,8 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
-                    │  Worker         │ ← No Internet Access
-                    │  (Rust)         │ ← Isolated Network
+                    │     Worker      │
+                    │  (Rust/Tokio)   │
                     └────────┬────────┘
                              │
         ┌────────────────────┼────────────────────┐
@@ -119,16 +166,35 @@ GeneGnome uses a microservices architecture with defense-in-depth security:
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | Frontend | Nginx + WebAssembly | Static UI, client-side VCF generation |
-| API Gateway | Rust/Axum (port 8099) | REST API, file uploads, downloads, WebSocket |
-| Worker | Rust/Tokio | Background processing, email notifications |
-| Database | PostgreSQL 18 | Job metadata, RLS, audit logging |
+| API Gateway | Rust / Axum (port 8099) | REST API, uploads, downloads, WebSocket |
+| Worker | Rust / Tokio | Background processing, email notification |
+| Database | PostgreSQL 18 | Job metadata, RLS, audit log |
 | Queue | Redis | Job queue |
 | Storage | LUKS AES-256-XTS | Encrypted volume for genetic data |
 
-Three independent Rust crates (no workspace):
-- `genetics-processor` (`app/`) — core library: parsers, genotype conversion, output generation
-- `genetics-api-gateway` (`api-gateway/`) — Axum REST API
-- `genetics-worker` (`worker/`) — background job processor
+Three independent crates, no Cargo workspace — each carries its own
+`Cargo.lock`:
+
+| Crate | Path | Role |
+|---|---|---|
+| `genetics-processor` | `app/` | Parsers, genotype conversion, output generation |
+| `genetics-api-gateway` | `api-gateway/` | Axum REST API |
+| `genetics-worker` | `worker/` | Background job processor |
+
+Rust 1.98+, edition 2024.
+
+### Client-side VCF generation
+
+Michigan Imputation Server rejects single-sample VCFs, so submission requires
+merging the user's genotypes with a reference panel first. GeneGnome does that
+in the browser: `frontend/www/stisty_wasm_bg.wasm` loads
+`frontend/www/reference_db.bin.br` (8.4MB, Brotli-compressed) and emits a
+reference-aware VCF with correct REF/ALT alleles from GRCh37. The genotype
+file never leaves the machine for this step. If the reference database fails
+to load, `vcf-app.js` falls back to generation without reference alleles.
+
+The later merge step — combining imputation results with the reference panel —
+is server-side and does involve upload.
 
 ---
 
@@ -136,33 +202,34 @@ Three independent Rust crates (no workspace):
 
 ### Prerequisites
 
-- **Docker**: Version 20.10+ with Docker Compose
-- **Linux**: Required for LUKS encrypted volumes (tested on Arch, Ubuntu, Debian)
-- **Storage**: Minimum 100GB for encrypted volume
-- **RAM**: 16GB+ recommended for processing large datasets
-- **CPU**: 4+ cores recommended
+- Docker 20.10+ with Compose v2
+- Linux — required for the LUKS encrypted volume (tested on Arch, Ubuntu,
+  Debian)
+- R — required once, to convert the reference panel to SQLite
+- 100GB+ storage for the encrypted volume; the reference database alone is
+  ~4.7GB
+- 16GB+ RAM and 4+ cores recommended
 
 ### Quick Start
 
-1. **Clone the repository**
+1. **Clone**
 
    ```bash
    git clone https://github.com/captainzonks/GeneGnome.git
    cd GeneGnome
    ```
 
-2. **Create environment file**
+2. **Configure**
 
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
-   nano .env
+   $EDITOR .env
    ```
 
-3. **Set up encrypted volume**
+3. **Create the encrypted volume**
 
    ```bash
-   # Creates 100GB LUKS-encrypted volume at /mnt/genetics-encrypted
+   # 100GB LUKS volume at /mnt/genetics-encrypted
    sudo ./scripts/setup_encrypted_volume.sh
    ```
 
@@ -171,10 +238,10 @@ Three independent Rust crates (no workspace):
    ```bash
    mkdir -p secrets/genetics secrets/smtp
 
-   # Database owner/bootstrap password (schema owner, not what the app connects as)
+   # Schema owner / bootstrap role — NOT what the services connect as
    openssl rand -base64 32 > secrets/genetics/genetics_psql_password
 
-   # Database runtime app password (api-gateway/worker connect as this role)
+   # Runtime role — api-gateway and worker connect as this (see ADR 0001)
    openssl rand -base64 32 > secrets/genetics/genetics_app_db_password
 
    # API authentication key
@@ -183,122 +250,167 @@ Three independent Rust crates (no workspace):
    # JWT signing secret
    openssl rand -base64 32 > secrets/genetics/genetics_jwt_secret
 
-   # SMTP password (use your email provider's app password)
-   echo 'your-smtp-password' > secrets/smtp/smtp_password
+   # SMTP password (an app password from your provider)
+   printf '%s' 'your-smtp-password' > secrets/smtp/smtp_password
 
-   # Secure the secrets
    chmod 600 secrets/*/*
    ```
 
-5. **Download and prepare reference data**
+5. **Prepare reference data**
 
    ```bash
    mkdir -p reference && cd reference
 
-   # Download imputed reference panel (167 MB, ~5.9M variants)
+   # Imputed reference panel, 167MB, ~5.9M variants
    wget http://www.matthewckeller.com/public/VCF.Files3.RData
 
-   # Convert to SQLite for Rust processor (requires R)
    cd .. && Rscript scripts/convert_reference_to_db.R
-
-   # This creates reference/reference_panel.db (~4.7 GB)
-   # See docs/REFERENCE_DATA.md for details
+   # Produces reference/reference_panel.db (~4.7GB)
    ```
 
-6. **Start services**
+   Details and provenance in [docs/REFERENCE_DATA.md](docs/REFERENCE_DATA.md).
+
+6. **Start**
 
    ```bash
    docker compose up -d
    docker compose logs -f
    ```
 
-7. **Access the web interface**
+7. Open `http://localhost`, or your configured domain.
 
-   Open your browser to `http://localhost` (or your configured domain)
+### Upgrading an existing deployment
+
+Deployments created before the role separation in
+`database/migrations/004_separate_runtime_role_from_owner.sql` must be
+upgraded in a specific order — provision the `genetics_app` password secret,
+run `database/00-create-app-role.sh`, apply the migration, then redeploy the
+services pointed at the new role. Out of order, the application either keeps
+bypassing RLS or fails to connect. The runbook is in the migration header and
+in [ADR 0001](docs/adr/0001-rls-role-separation.md).
 
 ### Configuration
 
-See [.env.example](.env.example) for all available configuration options. Key settings:
-
-- **Domain & SSL**: Configure your domain and reverse proxy
-- **Email**: SMTP settings for download notifications
-- **Security**: File size limits, data retention
-- **Resources**: Memory limits, CPU allocation for containers
+See [.env.example](.env.example). Key groups: domain and TLS, SMTP, upload
+size limits and retention, per-container memory and CPU limits.
 
 ---
 
 ## Usage
 
-### Web Interface
+1. **Generate VCF** (optional) — convert a 23andMe export to a multi-sample
+   VCF for imputation, in-browser
+2. **Upload and process** — submit the 23andMe file and the imputed VCF
+   results
+3. **Save recovery codes** — eight single-use codes, shown once at submission
+4. **Receive email** — download link and password on completion
+5. **Download** — a ZIP containing Parquet, VCF, and SQLite outputs
+6. **Explore** — visualization dashboard for the processed job
+7. **Manage** — look up jobs, resend email, or delete data
 
-1. **Generate VCF** (optional) — Convert 23andMe raw data to VCF format for imputation, entirely in-browser
-2. **Upload & process** — Upload your 23andMe file and imputed VCF results for server-side processing
-3. **Save recovery codes** — 8 single-use codes shown at submission for self-service data management
-4. **Receive email** — Secure download link with password sent when processing completes
-5. **Download results** — Password-protected ZIP with Parquet, VCF, and SQLite files
-6. **Explore insights** — Interactive visualization dashboard with charts for your processed data
-7. **Manage your data** — Look up jobs, resend emails, or delete data via the Job Lookup page
+**On the download ZIP:** the archive is written with
+`CompressionMethod::Stored` and is not itself encrypted. The password gates
+the download endpoint (single-use token, five-attempt limit); protection at
+rest is the LUKS volume. Treat the downloaded file as plaintext once it
+reaches your machine.
 
-### API Endpoints
+### API
 
 ```
-POST   /api/genetics/jobs                       — Submit processing job (multipart upload)
-GET    /api/genetics/jobs/{job_id}               — Job status (authenticated)
-DELETE /api/genetics/jobs/{job_id}               — Delete job
+POST   /api/genetics/jobs                        — submit job (multipart)
+GET    /api/genetics/jobs/{job_id}               — job status (authenticated)
+DELETE /api/genetics/jobs/{job_id}               — delete job
 GET    /api/genetics/jobs/{job_id}/ws            — WebSocket progress stream
-GET    /api/genetics/jobs/{job_id}/status        — Public status lookup
-POST   /api/genetics/jobs/{job_id}/resend-email  — Resend download email
-POST   /api/genetics/jobs/{job_id}/delete        — Self-service deletion (recovery code)
-GET    /api/genetics/jobs/{job_id}/visualization — Visualization data (job ID + password)
-GET    /api/genetics/download                    — Token-based file download
-GET    /api/genetics/visualization               — Token-based visualization data
-POST   /api/genetics/upload/chunks               — Chunked file upload
-POST   /api/genetics/upload/finalize             — Finalize chunked upload
-GET    /api/genetics/health                      — Health check
-GET    /api/genetics/ready                       — Readiness check
+GET    /api/genetics/jobs/{job_id}/status        — public status lookup
+POST   /api/genetics/jobs/{job_id}/resend-email  — resend download email
+POST   /api/genetics/jobs/{job_id}/delete        — deletion via recovery code
+GET    /api/genetics/jobs/{job_id}/visualization — visualization data
+GET    /api/genetics/download                    — token-based download
+GET    /api/genetics/visualization               — token-based visualization
+POST   /api/genetics/upload/chunks               — chunked upload
+POST   /api/genetics/upload/finalize             — finalize chunked upload
+GET    /api/genetics/health                      — health check
+GET    /api/genetics/ready                       — readiness check
 ```
-
----
-
-## Security Model
-
-GeneGnome implements defense-in-depth with multiple security layers:
-
-1. **Network Isolation** — Worker containers have zero internet access. Only the API gateway and frontend are publicly reachable.
-
-2. **Encryption at Rest** — All genetic data stored on LUKS AES-256-XTS encrypted volumes.
-
-3. **Secure File Deletion** — Input files are wiped using DoD 5220.22-M compliant overwrite patterns after processing. This is not a simple `rm` — the data is irrecoverable.
-
-4. **Automatic Data Expiration** — All results permanently deleted 24 hours after job completion. Hourly cleanup sweep enforces this.
-
-5. **Secure Downloads** — Token-based authentication with password protection. Maximum 5 attempts per download link. Tokens expire with the job.
-
-6. **Recovery Codes** — 8 Argon2id-hashed single-use codes per job. Users can delete their data at any time without email access.
-
-7. **Row-Level Security** — PostgreSQL RLS policies enforce job isolation at the database level. `api-gateway` and `worker` connect as `genetics_app`, a runtime role that is neither a superuser nor the schema owner and cannot bypass these policies (see [ADR 0001](docs/adr/0001-rls-role-separation.md)).
-
-8. **Container Hardening** — Non-root users (UID 3000), capability dropping (CAP_DROP ALL), resource limits.
-
-9. **Audit Logging** — All data access and processing events logged to an append-only audit table.
-
-See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 
 ---
 
 ## Performance
 
-Tested on AMD Ryzen 5600X (6 cores, 12 threads), 32GB RAM:
+### End-to-end merge, measured once
 
-| Dataset Size | Variants | Samples | R Script | GeneGnome | Speedup |
-|-------------|----------|---------|----------|-----------|---------|
-| Small       | 100K     | 1       | 2 min    | 2 sec     | 60x     |
-| Medium      | 1M       | 1       | 20 min   | 20 sec    | 60x     |
-| Large       | 6M       | 51      | 120 min  | 2 min     | 60x     |
+One full comparison against the R pipeline was run on 2025-11-17, recorded in
+[docs/CHANGELOG_2025-11-17.md](docs/CHANGELOG_2025-11-17.md). Dataset: the
+full 5.9M-variant reference panel merged across 51 samples, on a Ryzen 5600X
+(6 cores / 12 threads), 32GB RAM.
 
-- **Memory**: ~2GB peak vs ~40GB for R (streaming architecture)
-- **Concurrent Jobs**: Worker pool processes multiple jobs simultaneously
-- **Parquet Compression**: 10x storage reduction over raw formats
+| Metric | R pipeline | GeneGnome |
+|---|---|---|
+| Wall clock | ~120 min | ~2 min |
+| Peak memory | ~40 GB | ~2 GB |
+| Parallelism | single core | multi-core |
+
+This is **one measurement of one dataset**, not a benchmark suite. There is no
+committed benchmark harness in this repository — no `benches/`, no criterion —
+and the R script and comparison tooling live under the gitignored
+`genome-data/` directory, so the run above cannot be reproduced from a clone.
+Read the numbers as an order-of-magnitude result for this workload rather than
+a general speedup factor, and do not extrapolate them to smaller inputs.
+
+Output sizes from the same run:
+
+| Format | Size | Notes |
+|---|---|---|
+| Parquet (Snappy) | 436 MB | columnar, best for analysis |
+| VCF (bgzip) | 243 MB | 19.75:1 against plain text |
+| VCF (plain) | 4.8 GB | |
+| SQLite | ~1.3 GB | queryable |
+| RData (R output) | 182 MB | for comparison |
+
+### VCF parsing, reproducible
+
+`app/examples/vcf_test.rs` times the parser and can be run against any
+`.dose.vcf.gz`:
+
+```bash
+cd app && cargo run --release --example vcf_test -- /path/to/chr22.dose.vcf.gz
+```
+
+Recorded results for chr22 (152K SNPs) are in
+[app/docs/vcf_parser_benchmark.md](app/docs/vcf_parser_benchmark.md): 7.12s
+via `noodles-vcf` (21,373 records/sec), against 4.49s (31,312 records/sec) for
+a hand-rolled text parser that was rejected for weaker error handling and
+partial spec compliance. The slower, correct parser is the one in production;
+that document explains the trade.
+
+### Correctness against the R pipeline
+
+[docs/rust_vs_r_comparison.md](docs/rust_vs_r_comparison.md) records a
+1,560,234-variant (26.4%) discrepancy found between the two implementations
+and traced to a superseded single-sample merge strategy. It is kept as a
+point-in-time record of that investigation, not as current output.
+
+---
+
+## Limitations
+
+- **Autosomes only.** Chromosomes 1–22. X, Y, and mitochondrial variants are
+  dropped at parse time.
+- **GRCh37/hg19 only.** No liftover. Inputs on another build will merge
+  incorrectly rather than fail loudly.
+- **Fixed merge model.** 50 reference samples plus one user sample. The panel
+  is not swappable without code changes.
+- **Reference preparation needs R.** `scripts/convert_reference_to_db.R` is
+  the only supported path to `reference_panel.db`.
+- **Linux and root required** for the LUKS volume. There is no unencrypted
+  deployment mode.
+- **24-hour retention is not configurable per user.** Everything is deleted by
+  the hourly sweep.
+- **The library path is not streaming.** `app/src/processor.rs` holds merged
+  chromosomes in memory; only the worker streams.
+- **Single-node deployment.** No CI/CD to production and no horizontal
+  scaling. See the ADR discussion in
+  [Spoke](https://github.com/captainzonks/spoke) for the reasoning.
 
 ---
 
@@ -306,74 +418,83 @@ Tested on AMD Ryzen 5600X (6 cores, 12 threads), 32GB RAM:
 
 | Document | Description |
 |----------|-------------|
-| [README.md](README.md) | This file — overview and quick start |
 | [PRIVACY.md](PRIVACY.md) | Privacy policy and data handling |
-| [.env.example](.env.example) | Environment configuration reference |
-| [docs/REFERENCE_DATA.md](docs/REFERENCE_DATA.md) | Reference panel database details |
-| [docs/parquet_usage_guide.md](docs/parquet_usage_guide.md) | Working with Parquet output files |
+| [.env.example](.env.example) | Configuration reference |
+| [docs/adr/0001-rls-role-separation.md](docs/adr/0001-rls-role-separation.md) | Why RLS needed role separation, and what changed |
+| [docs/REFERENCE_DATA.md](docs/REFERENCE_DATA.md) | Reference panel provenance and preparation |
+| [docs/parquet_usage_guide.md](docs/parquet_usage_guide.md) | Working with Parquet output |
+| [docs/PGS_CALCULATION_REFERENCE.md](docs/PGS_CALCULATION_REFERENCE.md) | Polygenic score calculation |
+| [docs/platform_architecture.md](docs/platform_architecture.md) | Platform architecture detail |
+| [docs/email_credential_security_design.md](docs/email_credential_security_design.md) | Email credential handling |
+| [app/docs/vcf_parser_benchmark.md](app/docs/vcf_parser_benchmark.md) | Parser selection and timings |
+
+Point-in-time records, kept for history and not maintained:
+[docs/CHANGELOG_2025-11-12.md](docs/CHANGELOG_2025-11-12.md),
+[docs/CHANGELOG_2025-11-17.md](docs/CHANGELOG_2025-11-17.md),
+[docs/rust_vs_r_comparison.md](docs/rust_vs_r_comparison.md),
+[docs/architecture/data_comparison_analysis.md](docs/architecture/data_comparison_analysis.md),
+[docs/mergeData_pipeline_analysis.md](docs/mergeData_pipeline_analysis.md),
+[docs/r_processing_pipeline_specification.md](docs/r_processing_pipeline_specification.md),
+[docs/r_script_output_analysis.md](docs/r_script_output_analysis.md),
+[docs/rust_implementation_strategy.md](docs/rust_implementation_strategy.md),
+[docs/noodles_vcf_research.md](docs/noodles_vcf_research.md).
 
 ---
 
-## Contributing
-
-Contributions are welcome!
-
-### Development Setup
-
-Three independent Rust crates (no workspace — each has its own `Cargo.lock`):
+## Development
 
 ```bash
 git clone https://github.com/captainzonks/GeneGnome.git
 cd GeneGnome
 
-# Build individual crates
-cd app && cargo build --release
+# Build (per crate — there is no workspace)
+cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
-cd ../worker && cargo build --release
+cd ../worker   && cargo build --release
 
-# Run tests
-cd app && cargo test
+# Test — 67 tests: app 40, api-gateway 19, worker 8
+cd app         && cargo test
 cd ../api-gateway && cargo test
-cd ../worker && cargo test
+cd ../worker   && cargo test
 
-# Lint
-cargo fmt --all --check    # per crate
-cargo clippy --all-targets # per crate
+# Lint (per crate)
+cargo fmt --check
+cargo clippy --all-targets
 ```
 
-### Docker Build
+`api-gateway/tests/rls_enforcement.rs` is an integration test and needs a live
+PostgreSQL with the `genetics_app` role provisioned; see the ADR for setup.
+
+### Docker images
 
 ```bash
 docker build -f api-gateway/Dockerfile -t genegnome/genetics-api-gateway .
-docker build -f worker/Dockerfile -t genegnome/genetics-worker .
-docker build -f frontend/Dockerfile -t genegnome/genetics-frontend .
+docker build -f worker/Dockerfile      -t genegnome/genetics-worker .
+docker build -f frontend/Dockerfile    -t genegnome/genetics-frontend .
 ```
 
 ---
 
 ## License
 
-GeneGnome is dual-licensed under:
-
-- **Apache License 2.0** ([LICENSE-APACHE](LICENSE-APACHE))
-- **MIT License** ([LICENSE-MIT](LICENSE-MIT))
-
-You may choose either license when using this software.
+Dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at
+your option.
 
 ---
 
 ## Acknowledgments
 
-- **Reference Panel**: 50 anonymous genome samples originally from openSNP.org (now closed), freely uploaded for research. Current mirror: http://www.matthewckeller.com/public/VCF.Files3.RData
-- **Michigan Imputation Server**: https://imputationserver.sph.umich.edu/
-- **Original Pipeline**: Inspired by the R-based `mergeData()` pipeline by Dr. Matthew C. Keller
+- **Reference panel** — 50 anonymous genomes originally from openSNP.org (now
+  closed), uploaded freely for research. Current mirror:
+  http://www.matthewckeller.com/public/VCF.Files3.RData
+- **Michigan Imputation Server** — https://imputationserver.sph.umich.edu/
+- **Original pipeline** — the R `mergeData()` pipeline by Dr. Matthew C.
+  Keller
 
 ---
 
-**Author**: Matthew Barham
-**Version**: 1.2.0
-**Last Updated**: 2026-04-03
+**Disclaimer:** GeneGnome is for research and educational use. It is not a
+medical device and must not be used for clinical decision-making.
 
-For questions, issues, or feature requests: [GitHub Issues](https://github.com/captainzonks/GeneGnome/issues)
-
-**Disclaimer**: GeneGnome is for research and educational purposes. It is not a medical device and should not be used for clinical decision-making. Always consult qualified healthcare professionals for medical advice.
+Issues and feature requests:
+[GitHub Issues](https://github.com/captainzonks/GeneGnome/issues)
