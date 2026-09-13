@@ -549,7 +549,10 @@ downloadBatchVcfButton.addEventListener('click', async () => {
         // Note: Michigan Imputation Server requires BGZF compression (not standard gzip)
         // BGZF is not available in browsers, so we'll provide uncompressed VCFs
         // Users can compress with bgzip locally if needed: bgzip file.vcf
-        const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+        // Vendored locally (vendor/jszip.min.js) so batch export works fully offline.
+        if (typeof JSZip === 'undefined') {
+            throw new Error('JSZip failed to load — check that vendor/jszip.min.js is present');
+        }
 
         const zip = new JSZip();
 
