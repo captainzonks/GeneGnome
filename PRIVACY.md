@@ -1,6 +1,6 @@
 # GeneGnome Privacy Policy
 
-**Last updated:** April 3, 2026
+**Last updated:** September 27, 2026
 
 GeneGnome is an open-source genetic data processing platform. This policy explains how your data is handled when you use the service.
 
@@ -40,7 +40,7 @@ Results are delivered via a secure, password-protected download link sent to you
 
 ### Network Isolation
 
-The processing worker and job queue run on an **isolated network** with no internet access. Only the API gateway and frontend are publicly accessible.
+The job queue and database run on **isolated networks** with no internet access. The processing worker also joins those networks, plus the reverse-proxy network, which it uses only to send your download-link email. It makes no other outside connections. Only the API gateway and frontend are publicly accessible.
 
 ## Data Retention
 

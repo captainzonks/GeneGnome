@@ -8,8 +8,8 @@ Description: Overview, architecture, deployment, security model, and measured
              performance for the GeneGnome genetic data processing platform
 Author: Matt Barham
 Created: 2025-11-22
-Modified: 2026-09-13
-Version: 1.3.1
+Modified: 2026-09-27
+Version: 1.3.2
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -60,8 +60,11 @@ desktop. See [Performance](#performance) for what was measured and how.
 ### Security
 
 - **Encrypted storage** — LUKS AES-256-XTS volume for all genetic data
-- **Network isolation** — the worker runs on a Docker network declared
-  `internal: true` and has no route off-host
+- **Network isolation** — the job queue and database sit only on Docker
+  networks declared `internal: true`. The worker shares those networks and
+  also joins the reverse-proxy network, solely to send the download-link
+  email over SMTP: it has no HTTP client, publishes no ports, and has no
+  proxy route
 - **No third-party network calls from the frontend** — every script the
   frontend loads (JSZip, Chart.js, chartjs-plugin-annotation, MathJax, and
   its CHTML fonts) is vendored under `frontend/www/vendor/` rather than
