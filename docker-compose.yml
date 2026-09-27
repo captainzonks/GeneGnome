@@ -4,13 +4,14 @@
 # Description: Secure genetic data processing service with defense-in-depth
 # Author: Matt Barham
 # Created: 2025-10-31
-# Modified: 2026-03-13
-# Version: 1.4.3
+# Modified: 2026-09-27
+# Version: 1.4.4
 # Repository: https://github.com/captainzonks/GeneGnome
 # ==============================================================================
 #
 # Security Architecture:
-#   - Isolated network (no internet access for processor)
+#   - Isolated processing network (internal: true); the worker also joins
+#     proxy, for SMTP only
 #   - Encrypted volumes (LUKS AES-256)
 #   - Row-level database security
 #   - Container hardening (read-only root, seccomp, AppArmor)
