@@ -4,8 +4,8 @@
 // Description: Generate genetic analysis results in multiple formats for web delivery
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-04-02
-// Version: 1.2.0
+// Modified: 2026-09-27
+// Version: 1.2.1
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -28,6 +28,10 @@ use parquet::file::properties::WriterProperties;
 use rusqlite::{params, Connection};
 
 use crate::parsers::PgsDataset;
+
+/// `##source` header line for VCF output, carrying the crate's release
+/// version so downloaded files record which processor build produced them.
+const VCF_SOURCE: &str = concat!("##source=genetics-processor-v", env!("CARGO_PKG_VERSION"));
 use crate::models::{DataSource, MergedVariant, MultiSampleVariant, SampleData};
 
 /// Supported output formats for web delivery
@@ -1289,7 +1293,7 @@ impl OutputGenerator {
         // Write VCF header manually (simpler than noodles VCF writer API)
         writeln!(file, "##fileformat=VCFv4.3")?;
         writeln!(file, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
-        writeln!(file, "##source=genetics-processor-v1.0.0")?;
+        writeln!(file, "{VCF_SOURCE}")?;
         writeln!(file, "##INFO=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">")?;
         writeln!(file, "##INFO=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">")?;
         writeln!(file, "##INFO=<ID=SRC,Number=1,Type=String,Description=\"Data Source (Genotyped/Imputed/ImputedLowQual)\">")?;
@@ -1347,7 +1351,7 @@ impl OutputGenerator {
         // Write VCF header manually (simpler than noodles VCF writer API)
         writeln!(writer, "##fileformat=VCFv4.3")?;
         writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
-        writeln!(writer, "##source=genetics-processor-v1.0.0")?;
+        writeln!(writer, "{VCF_SOURCE}")?;
         writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
         writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
         writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
@@ -1622,7 +1626,7 @@ impl OutputGenerator {
                             // Write VCF header
                             writeln!(writer, "##fileformat=VCFv4.3")?;
                             writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
-                            writeln!(writer, "##source=genetics-processor-v1.0.0")?;
+                            writeln!(writer, "{VCF_SOURCE}")?;
                             writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
                             writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
                             writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
@@ -1923,7 +1927,7 @@ impl OutputGenerator {
                                 // Write VCF header
                                 writeln!(writer, "##fileformat=VCFv4.3")?;
                                 writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
-                                writeln!(writer, "##source=genetics-processor-v1.0.0")?;
+                                writeln!(writer, "{VCF_SOURCE}")?;
                                 writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
                                 writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
                                 writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
@@ -2373,6 +2377,15 @@ impl OutputGenerator {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn vcf_source_carries_the_crate_version() {
+        assert_eq!(
+            VCF_SOURCE,
+            format!("##source=genetics-processor-v{}", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
     use super::*;
 
     #[test]

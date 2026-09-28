@@ -4,8 +4,8 @@
 // Description: HTTP request handlers for genetics API endpoints
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-04-02
-// Version: 1.0.0
+// Modified: 2026-09-27
+// Version: 1.0.1
 // ==============================================================================
 
 use axum::{
@@ -43,7 +43,7 @@ use crate::{
 pub async fn root() -> Json<ApiInfoResponse> {
     Json(ApiInfoResponse {
         service: "Genetics API Gateway",
-        version: "1.0.0",
+        version: env!("CARGO_PKG_VERSION"),
         endpoints: vec![
             "/health - Health check",
             "/ready - Readiness check",
@@ -61,7 +61,7 @@ pub async fn root() -> Json<ApiInfoResponse> {
 pub async fn health_check() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        version: "1.0.0",
+        version: env!("CARGO_PKG_VERSION"),
         timestamp: Utc::now(),
     })
 }

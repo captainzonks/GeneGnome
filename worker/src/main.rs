@@ -4,8 +4,8 @@
 // Description: Background worker that processes genetics jobs from Redis queue
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-04-02
-// Version: 1.0.0
+// Modified: 2026-09-27
+// Version: 1.0.1
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         .compact()
         .init();
 
-    info!("Starting Genetics Worker v1.0.0");
+    info!("Starting Genetics Worker v{}", env!("CARGO_PKG_VERSION"));
 
     // Load environment variables
     dotenvy::dotenv().ok();
