@@ -12,6 +12,14 @@
 
 # Environment files with secrets
 .env
+
+# Site-specific compose overrides (auto-merged by Docker Compose). Deployment
+# data, never part of the module.
+docker-compose.override.yml
+
+# Site-specific backup path list read by Spoke's spoke_backup.sh
+# (modules/{name}/backup.conf). Instance data, not module code.
+backup.conf
 .env.local
 .env.production
 .env.development
