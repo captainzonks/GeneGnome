@@ -365,10 +365,19 @@ services:
       retries: 3
       start_period: 60s
 
+    # DATABASE_URL is assembled at start-up from the app-role secret file, so the
+    # password never lands in the environment or the generated .env.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        DATABASE_URL="postgresql://genetics_app:$$(cat /run/secrets/genetics_app_db_password)@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}";
+        export DATABASE_URL;
+        exec /usr/local/bin/genetics-api-gateway
+
     # Environment
     environment:
       - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
-      - DATABASE_URL=postgresql://genetics_app:${POSTGRES_GENETICS_APP_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
       - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
       - ENCRYPTED_VOLUME_PATH=${GENETICS_ENCRYPTED_DIR}
       - SMTP_HOST=${SMTP_HOST}
@@ -390,6 +399,7 @@ services:
     # Secrets
     secrets:
       - genetics_db_password
+      - genetics_app_db_password
       - genetics_api_key
       - smtp_password
 
@@ -458,9 +468,18 @@ services:
       retries: 3
       start_period: 10s
 
+    # DATABASE_URL is assembled at start-up from the app-role secret file, so the
+    # password never lands in the environment or the generated .env.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        DATABASE_URL="postgresql://genetics_app:$$(cat /run/secrets/genetics_app_db_password)@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}";
+        export DATABASE_URL;
+        exec /usr/local/bin/genetics-worker
+
     environment:
       - RUST_LOG=${GENETICS_LOG_LEVEL:-info}
-      - DATABASE_URL=postgresql://genetics_app:${POSTGRES_GENETICS_APP_PASSWORD}@postgres18-genetics:5432/${POSTGRES18_GENETICS_DB}
       - REDIS_URL=redis://genetics-redis:${REDIS_PORT:-6379}
       - ENCRYPTED_VOLUME_PATH=${GENETICS_ENCRYPTED_DIR}
       - SMTP_HOST=${SMTP_HOST}
@@ -480,6 +499,7 @@ services:
 
     secrets:
       - genetics_db_password
+      - genetics_app_db_password
       - smtp_password
 
   # ==============================================================================
