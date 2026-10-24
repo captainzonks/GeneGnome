@@ -56,6 +56,9 @@ secrets:
   - name: genetics_db_password
     path: genetics/genetics_psql_password
     required: true
+  - name: genetics_app_db_password
+    path: genetics/genetics_app_db_password
+    required: true
   - name: genetics_api_key
     path: genetics/genetics_api_key
     required: true
