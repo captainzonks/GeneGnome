@@ -527,7 +527,7 @@ services:
     container_name: genetics-frontend
     hostname: genetics-frontend
 
-    restart: on-failure
+    restart: unless-stopped
     init: true
     profiles: ["genetics", "all"]
 
