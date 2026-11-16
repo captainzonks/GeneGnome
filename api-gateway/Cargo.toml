@@ -17,7 +17,7 @@ name = "genetics-api-gateway"
 version = "1.5.5"
 edition = "2024"
 authors = ["Matt Barham"]
-rust-version = "1.99.1"
+rust-version = "1.100.0"
 
 # ==============================================================================
 # ASYNC RUNTIME
