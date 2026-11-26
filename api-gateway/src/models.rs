@@ -4,8 +4,8 @@
 // Description: Request/response models for genetics API
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.1.0
 // ==============================================================================
 
 use chrono::{DateTime, Utc};
@@ -55,7 +55,6 @@ pub struct DeleteJobRequest {
 #[derive(Debug, Serialize)]
 pub struct JobStatusResponse {
     pub job_id: Uuid,
-    pub user_id: String,
     pub status: JobStatus,
     pub progress: f32,
     pub created_at: DateTime<Utc>,

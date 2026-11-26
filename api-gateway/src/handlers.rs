@@ -5,7 +5,7 @@
 // Author: Matt Barham
 // Created: 2025-11-06
 // Modified: 2026-11-26
-// Version: 1.0.2
+// Version: 1.1.0
 // ==============================================================================
 
 use axum::{
@@ -29,6 +29,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
+    attempts::{self, Scope},
     // PUBLIC PLATFORM: No authentication middleware needed
     db,
     error::AppError,
@@ -435,8 +436,8 @@ pub async fn get_job_status(
     // it means a bug elsewhere in this handler can't leak another job.
     let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
-    let job = sqlx::query_as::<_, (uuid::Uuid, String, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)>(
-        "SELECT id, user_id, status, created_at, started_at, completed_at, error_message FROM genetics_jobs WHERE id = $1"
+    let job = sqlx::query_as::<_, (uuid::Uuid, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)>(
+        "SELECT id, status, created_at, started_at, completed_at, error_message FROM genetics_jobs WHERE id = $1"
     )
     .bind(job_id)
     .fetch_optional(&mut *tx)
@@ -444,15 +445,8 @@ pub async fn get_job_status(
     .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
     .ok_or(AppError::NotFound)?;
 
-    let (
-        job_id_db,
-        user_id_db,
-        status_str,
-        created_at_db,
-        started_at_db,
-        completed_at_db,
-        error_message_db,
-    ) = job;
+    let (job_id_db, status_str, created_at_db, started_at_db, completed_at_db, error_message_db) =
+        job;
 
     let status = match status_str.as_str() {
         "queued" => JobStatus::Queued,
@@ -485,7 +479,6 @@ pub async fn get_job_status(
 
     Ok(Json(JobStatusResponse {
         job_id: job_id_db,
-        user_id: user_id_db,
         status,
         progress,
         created_at: created_at_db,
@@ -1185,14 +1178,38 @@ struct ValidatedJob {
     metadata: Option<serde_json::Value>,
 }
 
+/// Count a credential guess, refusing it once the job's cap is reached. Fails
+/// closed: without Redis the guess cannot be counted, so it is not checked.
+fn limit_attempts(redis: &redis::Client, scope: Scope, job_id: Uuid) -> Result<(), AppError> {
+    let allowed = attempts::register(redis, scope, job_id)
+        .map_err(|e| AppError::Internal(format!("Failed to count attempt: {}", e)))?;
+    if allowed {
+        Ok(())
+    } else {
+        warn!("Too many {:?} attempts for job {}", scope, job_id);
+        Err(AppError::TooManyRequests)
+    }
+}
+
+/// Reset a job's guess count. A failure only leaves the old count to expire.
+fn forget_attempts(redis: &redis::Client, scope: Scope, job_id: Uuid) {
+    if let Err(e) = attempts::clear(redis, scope, job_id) {
+        warn!(
+            "Failed to reset {:?} attempts for job {}: {}",
+            scope, job_id, e
+        );
+    }
+}
+
 /// Validate download credentials (token + password) against the database.
 ///
-/// Performs 5-layer validation: status, expiry, attempt limit, rate limit, password.
+/// Validates status, expiry, download limit, rate limit, guess limit and password.
 /// Does NOT increment download_attempts (caller decides whether to count the access).
 async fn validate_download_credentials(
     token: &str,
     password: &str,
     pool: &sqlx::PgPool,
+    redis: &redis::Client,
 ) -> Result<ValidatedJob, AppError> {
     let client_ip = "unknown".to_string();
 
@@ -1300,6 +1317,22 @@ async fn validate_download_credentials(
         .as_ref()
         .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
 
+    if let Err(e) = limit_attempts(redis, Scope::Download, job_id) {
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            true,
+            true,
+            false,
+            "rate_limited",
+        )
+        .await;
+        return Err(e);
+    }
+
     let password_valid = verify_password(password, password_hash)
         .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
 
@@ -1318,6 +1351,8 @@ async fn validate_download_credentials(
         .await;
         return Err(AppError::BadRequest("Invalid password".to_string()));
     }
+
+    forget_attempts(redis, Scope::Download, job_id);
 
     Ok(ValidatedJob {
         id: job_id,
@@ -1346,7 +1381,9 @@ pub async fn download_results(
         &token[..8.min(token.len())]
     );
 
-    let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
+    let validated =
+        validate_download_credentials(&token, &password, state.db_pool(), state.redis_client())
+            .await?;
     let job_id = validated.id;
 
     // Increment download attempts (downloads are destructive -- count them)
@@ -1483,7 +1520,9 @@ pub async fn get_visualization(
         .password
         .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
 
-    let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
+    let validated =
+        validate_download_credentials(&token, &password, state.db_pool(), state.redis_client())
+            .await?;
 
     let viz_data = validated
         .metadata
@@ -1532,12 +1571,15 @@ pub async fn get_visualization_by_job(
     let hash =
         password_hash.ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
 
+    limit_attempts(state.redis_client(), Scope::JobPassword, job_id)?;
+
     let valid = verify_password(password, &hash)
         .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
 
     if !valid {
         return Err(AppError::BadRequest("Invalid password".to_string()));
     }
+    forget_attempts(state.redis_client(), Scope::JobPassword, job_id);
 
     let viz_data = metadata
         .and_then(|m| m.get("visualization").cloned())
@@ -1698,6 +1740,10 @@ pub async fn resend_email(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
 
+    // A new password makes earlier guesses irrelevant
+    forget_attempts(state.redis_client(), Scope::Download, job_id);
+    forget_attempts(state.redis_client(), Scope::JobPassword, job_id);
+
     // Send email with existing token + new password
     let completed_at = completed_at.unwrap_or_else(Utc::now);
     let expires_at = expires_at.unwrap_or_else(|| Utc::now() + chrono::Duration::hours(24));
@@ -1776,6 +1822,8 @@ pub async fn delete_job_with_recovery(
     if codes.is_empty() {
         return Err(AppError::Forbidden);
     }
+
+    limit_attempts(state.redis_client(), Scope::RecoveryCode, job_id)?;
 
     // Verify the code against each hash (CPU-intensive, use spawn_blocking)
     let codes_clone = codes.clone();

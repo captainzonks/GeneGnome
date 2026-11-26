@@ -4,12 +4,13 @@
 // Description: Background worker that processes genetics jobs from Redis queue
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-09-27
-// Version: 1.0.1
+// Modified: 2026-11-26
+// Version: 1.1.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
 use chrono::Utc;
+use genetics_processor::secure_delete::secure_delete_directory;
 use redis::Client as RedisClient;
 use redis::aio::ConnectionManager;
 use sqlx::PgPool;
@@ -144,6 +145,30 @@ fn validate_upload_session_id(id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Securely delete a job's uploaded inputs: its upload directory and, for a
+/// chunked upload, the chunk session directory. Both are attempted even if one
+/// fails.
+async fn wipe_inputs(volume: &Path, job_id: Uuid, upload_session_id: Option<&str>) -> Result<()> {
+    let uploads = volume.join("uploads");
+    let mut directories = vec![uploads.join(job_id.to_string())];
+    if let Some(session) = upload_session_id {
+        validate_upload_session_id(session).context("Invalid upload_session_id")?;
+        directories.push(uploads.join("chunks").join(session));
+    }
+
+    let mut first_error = None;
+    for directory in directories {
+        if !directory.exists() {
+            continue;
+        }
+        if let Err(e) = secure_delete_directory(&directory).await {
+            first_error.get_or_insert(e.context(format!("Failed to wipe {:?}", directory)));
+        }
+    }
+
+    first_error.map_or(Ok(()), Err)
+}
+
 /// Main worker struct
 #[derive(Clone)]
 struct Worker {
@@ -180,8 +205,15 @@ impl Worker {
                     // Process job in background (don't block queue)
                     let worker = self.clone();
                     tokio::spawn(async move {
+                        let job_id = payload.job_id;
+                        let session = payload.upload_session_id.clone();
                         if let Err(e) = worker.process_job(payload).await {
                             error!("Job processing failed: {}", e);
+                        }
+                        // Inputs are not needed again, whether or not the job succeeded
+                        let volume = &worker.encrypted_volume_path;
+                        if let Err(e) = wipe_inputs(volume, job_id, session.as_deref()).await {
+                            error!("Failed to wipe inputs of job {}: {:#}", job_id, e);
                         }
                     });
                 }
@@ -622,6 +654,10 @@ impl Worker {
             )
             .await?;
             self.publish_progress(job_id, 0.0, error_msg).await?;
+
+            if let Err(e) = wipe_inputs(&self.encrypted_volume_path, job_id, None).await {
+                error!("Failed to wipe inputs of job {}: {:#}", job_id, e);
+            }
         }
 
         Ok(())
@@ -668,19 +704,22 @@ impl Worker {
                 .join("results")
                 .join(job_id.to_string());
 
-            if upload_dir.exists() {
-                // TODO: Use secure_delete from genetics-processor
-                match tokio::fs::remove_dir_all(&upload_dir).await {
-                    Ok(_) => info!("Deleted upload directory for job {}", job_id),
-                    Err(e) => warn!("Failed to delete upload directory: {}", e),
+            // Keep the job row if a file cannot be deleted, so the next sweep retries
+            let mut files_deleted = true;
+            for directory in [&upload_dir, &results_dir] {
+                if !directory.exists() {
+                    continue;
+                }
+                match secure_delete_directory(directory).await {
+                    Ok(()) => info!("Deleted {:?} for job {}", directory, job_id),
+                    Err(e) => {
+                        error!("Failed to delete {:?}: {:#}", directory, e);
+                        files_deleted = false;
+                    }
                 }
             }
-
-            if results_dir.exists() {
-                match tokio::fs::remove_dir_all(&results_dir).await {
-                    Ok(_) => info!("Deleted results directory for job {}", job_id),
-                    Err(e) => warn!("Failed to delete results directory: {}", e),
-                }
+            if !files_deleted {
+                continue;
             }
 
             // Use transaction to set RLS context and delete job
@@ -807,12 +846,54 @@ impl Worker {
         }
 
         // Clean up chunks directory
-        tokio::fs::remove_dir_all(chunks_dir)
+        secure_delete_directory(chunks_dir)
             .await
             .context("Failed to clean up chunks directory")?;
 
         info!("Cleaned up chunks directory for job {}", job_id);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn wipe_inputs_removes_this_jobs_uploads_and_chunks_only() {
+        let volume = tempfile::tempdir().unwrap();
+        let job_id = Uuid::new_v4();
+        let uploads = volume.path().join("uploads");
+        let mine = uploads.join(job_id.to_string());
+        let chunks = uploads.join("chunks/session_1");
+        let other = uploads.join(Uuid::new_v4().to_string());
+        for dir in [&mine, &chunks, &other] {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("genome.txt"), b"data").unwrap();
+        }
+
+        wipe_inputs(volume.path(), job_id, Some("session_1"))
+            .await
+            .unwrap();
+
+        assert!(!mine.exists());
+        assert!(!chunks.exists());
+        assert!(other.join("genome.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn wipe_inputs_rejects_a_traversing_session_id_and_tolerates_missing_dirs() {
+        let volume = tempfile::tempdir().unwrap();
+        assert!(
+            wipe_inputs(volume.path(), Uuid::new_v4(), None)
+                .await
+                .is_ok()
+        );
+        assert!(
+            wipe_inputs(volume.path(), Uuid::new_v4(), Some("../.."))
+                .await
+                .is_err()
+        );
     }
 }
