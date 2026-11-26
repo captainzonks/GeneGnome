@@ -4,13 +4,13 @@
 # Description: Static nginx frontend for genetics processing job submission
 # Author: Matt Barham
 # Created: 2025-11-18
-# Modified: 2025-11-18
-# Version: 1.0.0
-# Base Image: nginx:1.27.3-alpine
+# Modified: 2026-11-25
+# Version: 1.0.1
+# Base Image: nginx:1.30-alpine
 # Security: Non-root user (genetics:genetics)
 # ==============================================================================
 
-FROM nginx:1.27.3-alpine
+FROM nginx:1.30-alpine
 
 # Build arguments for user/group
 ARG USER_ID=3000
