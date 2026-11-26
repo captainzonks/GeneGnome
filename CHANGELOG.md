@@ -8,7 +8,7 @@ Description: Notable changes in each release, newest first
 Author: Matt Barham
 Created: 2026-09-27
 Modified: 2026-11-26
-Version: 1.6.0
+Version: 1.7.0
 ==============================================================================
 Document Type: Changelog
 Audience: Operator, Module Developer
@@ -21,6 +21,16 @@ All notable changes to this project are documented here. The format follows
 follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). What
 counts as a breaking change for a Spoke module is defined in the Spoke hub's
 ADR-029.
+
+## [1.7.0] - 2026-11-26
+
+### Added
+
+- Add a demo that runs on synthetic data from a clone (#63)
+
+### Fixed
+
+- Report completed jobs correctly on the completion page (#64)
 
 ## [1.6.0] - 2026-11-26
 
