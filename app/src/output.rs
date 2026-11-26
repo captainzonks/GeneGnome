@@ -5,7 +5,7 @@
 // Author: Matt Barham
 // Created: 2025-11-06
 // Modified: 2026-11-26
-// Version: 1.3.0
+// Version: 2.0.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -31,6 +31,11 @@ use crate::parsers::PgsDataset;
 /// version so downloaded files record which processor build produced them.
 const VCF_SOURCE: &str = concat!("##source=genetics-processor-v", env!("CARGO_PKG_VERSION"));
 use crate::models::{DataSource, MergedVariant, MultiSampleVariant, SampleData};
+
+/// A VCF value with three decimals, or "." when there is none
+fn format_optional(value: Option<f64>) -> String {
+    value.map_or_else(|| ".".to_string(), |v| format!("{v:.3}"))
+}
 
 /// File name of the polygenic score table added to the results
 const PGS_CSV_NAME: &str = "pgs_scores.csv";
@@ -184,6 +189,8 @@ pub struct SourceBreakdown {
     pub genotyped: usize,
     pub imputed: usize,
     pub imputed_low_quality: usize,
+    /// Variants where the user has no usable call
+    pub missing: usize,
 }
 
 /// Dosage distribution for the user sample (binned by rounding)
@@ -234,7 +241,7 @@ pub struct MultiSampleVariantOutput {
 pub struct SampleDataOutput {
     pub sample_id: String,
     pub genotype: String,
-    pub dosage: f64,
+    pub dosage: Option<f64>,
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub imputation_quality: Option<f64>,
@@ -297,6 +304,7 @@ struct StreamingState {
     source_genotyped: usize,
     source_imputed: usize,
     source_low_quality: usize,
+    source_missing: usize,
     // Ti/Tv ratio accumulators (SNPs only)
     transitions: usize,
     transversions: usize,
@@ -842,7 +850,7 @@ impl OutputGenerator {
             Field::new("is_typed", DataType::UInt64, false),
             Field::new("sample_id", DataType::Utf8, false),
             Field::new("genotype", DataType::Utf8, false),
-            Field::new("dosage", DataType::Float64, false),
+            Field::new("dosage", DataType::Float64, true),
             Field::new("source", DataType::Utf8, false),
             Field::new("imputation_quality", DataType::Float64, true),
         ]));
@@ -1160,7 +1168,7 @@ impl OutputGenerator {
                 is_typed INTEGER NOT NULL,
                 sample_id TEXT NOT NULL,
                 genotype TEXT NOT NULL,
-                dosage REAL NOT NULL,
+                dosage REAL,
                 source TEXT NOT NULL,
                 imputation_quality REAL,
                 PRIMARY KEY (chromosome, position, ref_allele, alt_allele, sample_id)
@@ -1501,8 +1509,10 @@ impl OutputGenerator {
 
                         write!(
                             writer,
-                            "\t{}:{:.3}:{}",
-                            sample.genotype, sample.dosage, iq_str
+                            "\t{}:{}:{}",
+                            sample.genotype,
+                            format_optional(sample.dosage),
+                            iq_str
                         )?;
                     }
                     writeln!(writer)?;
@@ -1588,6 +1598,7 @@ impl OutputGenerator {
             source_genotyped: 0,
             source_imputed: 0,
             source_low_quality: 0,
+            source_missing: 0,
             transitions: 0,
             transversions: 0,
             per_chr_transitions: HashMap::new(),
@@ -1647,7 +1658,7 @@ impl OutputGenerator {
                             is_typed INTEGER NOT NULL,
                             sample_id TEXT NOT NULL,
                             genotype TEXT NOT NULL,
-                            dosage REAL NOT NULL,
+                            dosage REAL,
                             source TEXT NOT NULL,
                             imputation_quality REAL
                         )",
@@ -1898,21 +1909,25 @@ impl OutputGenerator {
                     DataSource::Genotyped => state.source_genotyped += 1,
                     DataSource::Imputed => state.source_imputed += 1,
                     DataSource::ImputedLowQual => state.source_low_quality += 1,
+                    DataSource::Missing => state.source_missing += 1,
                 }
 
-                // Heterozygosity (het genotypes: "0|1" or "1|0")
-                chr_het_total += 1;
-                if user_sample.genotype == "0|1" || user_sample.genotype == "1|0" {
-                    chr_het_count += 1;
-                }
+                // Heterozygosity and dosage distribution cover called variants only
+                if let Some(dosage) = user_sample.dosage {
+                    // Heterozygosity (het genotypes: "0|1" or "1|0")
+                    chr_het_total += 1;
+                    if user_sample.genotype == "0|1" || user_sample.genotype == "1|0" {
+                        chr_het_count += 1;
+                    }
 
-                // Dosage distribution (user sample)
-                if user_sample.dosage < 0.5 {
-                    state.dosage_hom_ref += 1;
-                } else if user_sample.dosage > 1.5 {
-                    state.dosage_hom_alt += 1;
-                } else {
-                    state.dosage_het += 1;
+                    // Dosage distribution (user sample)
+                    if dosage < 0.5 {
+                        state.dosage_hom_ref += 1;
+                    } else if dosage > 1.5 {
+                        state.dosage_hom_alt += 1;
+                    } else {
+                        state.dosage_het += 1;
+                    }
                 }
             }
         }
@@ -2032,8 +2047,10 @@ impl OutputGenerator {
 
                                         write!(
                                             file,
-                                            "\t{}:{:.3}:{}",
-                                            sample.genotype, sample.dosage, iq_str
+                                            "\t{}:{}:{}",
+                                            sample.genotype,
+                                            format_optional(sample.dosage),
+                                            iq_str
                                         )?;
                                     }
                                     writeln!(file)?;
@@ -2144,8 +2161,10 @@ impl OutputGenerator {
 
                                         write!(
                                             writer,
-                                            "\t{}:{:.3}:{}",
-                                            sample.genotype, sample.dosage, iq_str
+                                            "\t{}:{}:{}",
+                                            sample.genotype,
+                                            format_optional(sample.dosage),
+                                            iq_str
                                         )?;
                                     }
                                     writeln!(writer)?;
@@ -2188,7 +2207,7 @@ impl OutputGenerator {
                             Field::new("is_typed", DataType::UInt64, false),
                             Field::new("sample_id", DataType::Utf8, false),
                             Field::new("genotype", DataType::Utf8, false),
-                            Field::new("dosage", DataType::Float64, false),
+                            Field::new("dosage", DataType::Float64, true),
                             Field::new("source", DataType::Utf8, false),
                             Field::new("imputation_quality", DataType::Float64, true),
                         ]));
@@ -2650,6 +2669,7 @@ impl OutputGenerator {
                 genotyped: state.source_genotyped,
                 imputed: state.source_imputed,
                 imputed_low_quality: state.source_low_quality,
+                missing: state.source_missing,
             },
             ti_tv_ratio: if state.transversions > 0 {
                 Some(state.transitions as f64 / state.transversions as f64)
@@ -2751,5 +2771,105 @@ mod tests {
                 .unwrap();
             assert_eq!(value, expected, "{table}");
         }
+    }
+
+    #[tokio::test]
+    async fn streaming_output_keeps_missing_calls_missing() {
+        use crate::models::ReferencePanelVariant;
+        use crate::parsers::genome23andme::Genome23Record;
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        use std::io::Read;
+
+        let reference = |position| ReferencePanelVariant {
+            chromosome: 1,
+            position,
+            rsid: None,
+            ref_allele: "A".into(),
+            alt_allele: "G".into(),
+            phased: true,
+            allele_freq: Some(0.5),
+            minor_allele_freq: Some(0.5),
+            imputation_quality: Some(0.99),
+            is_typed: false,
+            sample_genotypes: vec!["0|1".into(); 50],
+        };
+        let call = Genome23Record {
+            rsid: "rs1".into(),
+            chromosome: "1".into(),
+            position: 1,
+            genotype: "GG".into(),
+        };
+        // One variant the user has, one the user has nothing for
+        let variants = vec![
+            crate::merge::merge_variant(1, &reference(1), &[&call], None),
+            crate::merge::merge_variant(1, &reference(2), &[], None),
+        ];
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut generator =
+            OutputGenerator::new("job".into(), "user".into(), dir.path().to_path_buf());
+        generator
+            .initialize_streaming_output(
+                &[
+                    OutputFormat::Sqlite,
+                    OutputFormat::Vcf,
+                    OutputFormat::Parquet,
+                ],
+                VcfFormat::Merged,
+            )
+            .await
+            .unwrap();
+        generator.append_chromosome(1, &variants).await.unwrap();
+        let (paths, summary) = generator.finalize_streaming_output().await.unwrap();
+
+        let db = Connection::open(&paths[&OutputFormat::Sqlite]).unwrap();
+        let (dosage, source): (Option<f64>, String) = db
+            .query_row(
+                "SELECT dosage, source FROM variants WHERE position = 2 AND sample_id = 'samp51'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((dosage, source.as_str()), (None, "Missing"));
+
+        let mut vcf = String::new();
+        flate2::read::MultiGzDecoder::new(std::fs::File::open(&paths[&OutputFormat::Vcf]).unwrap())
+            .read_to_string(&mut vcf)
+            .unwrap();
+        let user_columns: Vec<&str> = vcf
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .map(|line| line.rsplit('\t').next().unwrap())
+            .collect();
+        assert_eq!(user_columns, ["1|1:2.000:.", ".|.:.:."]);
+
+        let parquet = dir
+            .path()
+            .read_dir()
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| path.extension().is_some_and(|e| e == "parquet"))
+            .unwrap();
+        let nulls: usize =
+            ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(parquet).unwrap())
+                .unwrap()
+                .build()
+                .unwrap()
+                .map(|batch| {
+                    batch
+                        .unwrap()
+                        .column_by_name("dosage")
+                        .unwrap()
+                        .null_count()
+                })
+                .sum();
+        assert_eq!(nulls, 1);
+
+        assert_eq!(summary.source_breakdown.genotyped, 1);
+        assert_eq!(summary.source_breakdown.missing, 1);
+        // Missing calls count toward neither heterozygosity nor dosage bins
+        assert_eq!(summary.heterozygosity_rate, Some(0.0));
+        assert_eq!(summary.dosage_distribution.homozygous_alt, 1);
+        assert_eq!(summary.dosage_distribution.homozygous_ref, 0);
     }
 }

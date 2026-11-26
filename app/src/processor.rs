@@ -4,8 +4,8 @@
 // Description: Merges 23andMe data with imputed VCF files and 50-sample reference panel
 // Author: Matt Barham
 // Created: 2025-10-31
-// Modified: 2025-11-12
-// Version: 2.0.0
+// Modified: 2026-11-26
+// Version: 2.0.1
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -16,8 +16,8 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::audit;
-use crate::genotype_converter::genotype_to_dosage;
-use crate::models::{MultiSampleVariant, QualityThreshold, SampleData};
+use crate::merge::merge_variant;
+use crate::models::{MultiSampleVariant, QualityThreshold};
 use crate::parsers::{Genome23Parser, Genome23Record, PgsDataset, PgsParser, VCFParser};
 use crate::reference_panel::ReferencePanelReader;
 use crate::secure_delete;
@@ -279,26 +279,20 @@ impl GeneticsProcessor {
             user_vcf_lookup.insert(key, record);
         }
 
-        // Build lookup for 23andMe data (only by position, since we'll check alleles during matching)
-        let mut user_genome_lookup: HashMap<u64, &Genome23Record> = HashMap::new();
+        // 23andMe records by position; alleles are checked during the merge
+        let mut user_genome_lookup: HashMap<u64, Vec<&Genome23Record>> = HashMap::new();
         for record in &user_genome_records {
-            user_genome_lookup.insert(record.position, record);
+            user_genome_lookup
+                .entry(record.position)
+                .or_default()
+                .push(record);
         }
 
         // 5. Merge all variants
         let mut merged = Vec::new();
-        let mut user_genotyped_count = 0;
-        let mut user_imputed_count = 0;
         let mut filtered_by_quality = 0;
 
         for ref_variant in ref_variants {
-            // Check if user has VCF data for this variant (match by position + REF + ALT)
-            let key = (
-                ref_variant.position,
-                ref_variant.ref_allele.clone(),
-                ref_variant.alt_allele.clone(),
-            );
-
             // Apply quality filtering
             if !self
                 .quality_threshold
@@ -308,128 +302,26 @@ impl GeneticsProcessor {
                 continue;
             }
 
-            let user_sample = if let Some(user_vcf) = user_vcf_lookup.get(&key) {
-                // User has imputed VCF data for this variant
-                // Check if we also have genotyped data
-                if let Some(user_genome) = user_genome_lookup.get(&ref_variant.position) {
-                    // Try to use genotyped data
-                    match genotype_to_dosage(
-                        &user_genome.genotype,
-                        &ref_variant.ref_allele,
-                        &ref_variant.alt_allele,
-                    ) {
-                        Ok(Some(dosage)) => {
-                            // Successfully converted genotype
-                            user_genotyped_count += 1;
-                            SampleData {
-                                sample_id: "samp51".to_string(),
-                                genotype: user_genome.genotype.clone(),
-                                dosage,
-                                source: DataSource::Genotyped,
-                                imputation_quality: user_vcf.imputation_quality,
-                            }
-                        }
-                        Ok(None) | Err(_) => {
-                            // Missing genotype or conversion error, use imputed
-                            user_imputed_count += 1;
-                            let source = if let Some(qual) = user_vcf.imputation_quality {
-                                if qual < 0.3 {
-                                    DataSource::ImputedLowQual
-                                } else {
-                                    DataSource::Imputed
-                                }
-                            } else {
-                                DataSource::Imputed
-                            };
-
-                            SampleData {
-                                sample_id: "samp51".to_string(),
-                                genotype: format_dosage_as_genotype(user_vcf.dosage),
-                                dosage: user_vcf.dosage,
-                                source,
-                                imputation_quality: user_vcf.imputation_quality,
-                            }
-                        }
-                    }
-                } else {
-                    // No genotyped data, use imputed from VCF
-                    user_imputed_count += 1;
-                    let source = if let Some(qual) = user_vcf.imputation_quality {
-                        if qual < 0.3 {
-                            DataSource::ImputedLowQual
-                        } else {
-                            DataSource::Imputed
-                        }
-                    } else {
-                        DataSource::Imputed
-                    };
-
-                    SampleData {
-                        sample_id: "samp51".to_string(),
-                        genotype: format_dosage_as_genotype(user_vcf.dosage),
-                        dosage: user_vcf.dosage,
-                        source,
-                        imputation_quality: user_vcf.imputation_quality,
-                    }
-                }
-            } else {
-                // User has no VCF data for this variant
-                // Mark as missing data (dosage 0.0, genotype "./.")
-                SampleData {
-                    sample_id: "samp51".to_string(),
-                    genotype: "./.".to_string(),
-                    dosage: 0.0,
-                    source: DataSource::ImputedLowQual,
-                    imputation_quality: None,
-                }
-            };
-
-            // Build samples vector: 50 reference samples + 1 user sample
-            let mut samples = Vec::with_capacity(51);
-
-            // Add 50 reference samples
-            for (idx, genotype) in ref_variant.sample_genotypes.iter().enumerate() {
-                let sample_id = format!("samp{}", idx + 1);
-                let dosage = calculate_dosage_from_genotype(genotype);
-
-                samples.push(SampleData {
-                    sample_id,
-                    genotype: genotype.clone(),
-                    dosage,
-                    source: if ref_variant.is_typed {
-                        DataSource::Genotyped
-                    } else {
-                        DataSource::Imputed
-                    },
-                    imputation_quality: ref_variant.imputation_quality,
-                });
-            }
-
-            // Add user sample (sample 51)
-            samples.push(user_sample);
-
-            // Create multi-sample variant
-            merged.push(MultiSampleVariant {
-                rsid: ref_variant
-                    .rsid
-                    .unwrap_or_else(|| format!("chr{}:{}", chr, ref_variant.position)),
-                chromosome: chr,
-                position: ref_variant.position,
-                ref_allele: ref_variant.ref_allele.clone(),
-                alt_allele: ref_variant.alt_allele.clone(),
-                allele_freq: ref_variant.allele_freq,
-                minor_allele_freq: ref_variant.minor_allele_freq,
-                is_typed: ref_variant.is_typed,
-                samples,
-            });
+            let key = (
+                ref_variant.position,
+                ref_variant.ref_allele.clone(),
+                ref_variant.alt_allele.clone(),
+            );
+            let genotyped = user_genome_lookup
+                .get(&ref_variant.position)
+                .map_or(&[][..], Vec::as_slice);
+            merged.push(merge_variant(
+                chr,
+                &ref_variant,
+                genotyped,
+                user_vcf_lookup.get(&key).copied(),
+            ));
         }
 
         info!(
-            "Merged chr{}: {} variants ({} user genotyped, {} user imputed, {} filtered by quality)",
+            "Merged chr{}: {} variants ({} filtered by quality)",
             chr,
             merged.len(),
-            user_genotyped_count,
-            user_imputed_count,
             filtered_by_quality
         );
 
@@ -609,37 +501,3 @@ struct InputFiles {
 }
 
 // Helper functions
-
-/// Convert dosage (0.0-2.0) to genotype string for display
-fn format_dosage_as_genotype(dosage: f64) -> String {
-    // Round to nearest integer for simple display
-    // 0.0 -> "0|0", 1.0 -> "0|1", 2.0 -> "1|1"
-    if dosage < 0.5 {
-        "0|0".to_string()
-    } else if dosage < 1.5 {
-        "0|1".to_string()
-    } else {
-        "1|1".to_string()
-    }
-}
-
-/// Calculate dosage from phased genotype string
-fn calculate_dosage_from_genotype(genotype: &str) -> f64 {
-    // Parse genotypes like "0|0", "0|1", "1|0", "1|1", "./."
-    let parts: Vec<&str> = if genotype.contains('|') {
-        genotype.split('|').collect()
-    } else if genotype.contains('/') {
-        genotype.split('/').collect()
-    } else {
-        return 0.0; // Invalid format
-    };
-
-    if parts.len() != 2 {
-        return 0.0;
-    }
-
-    let allele1 = parts[0].parse::<i32>().unwrap_or(0);
-    let allele2 = parts[1].parse::<i32>().unwrap_or(0);
-
-    (allele1 + allele2) as f64
-}

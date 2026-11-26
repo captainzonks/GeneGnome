@@ -5,7 +5,7 @@
 // Author: Matt Barham
 // Created: 2025-11-06
 // Modified: 2026-11-26
-// Version: 1.1.0
+// Version: 1.2.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -14,22 +14,17 @@ use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 // Import from genetics-processor library
-use genetics_processor::genotype_converter::genotype_to_dosage;
-use genetics_processor::models::MergedVariant;
-use genetics_processor::models::{
-    MultiSampleVariant, QualityThreshold as ModelQualityThreshold, SampleData,
-};
-use genetics_processor::output::{OutputFormat as ProcessorOutputFormat, OutputGenerator};
+use genetics_processor::merge::merge_variant;
+use genetics_processor::models::{MultiSampleVariant, QualityThreshold as ModelQualityThreshold};
 use genetics_processor::parsers::{
     genome23andme::{Genome23Parser, Genome23Record},
     pgs::{PgsParser, is_scores_filename},
     vcf::{VCFParser, VCFRecord},
 };
-use genetics_processor::processor::DataSource;
 use genetics_processor::reference_panel::ReferencePanelReader;
 
 use crate::db;
@@ -558,253 +553,6 @@ impl JobProcessor {
         Ok((output_paths, viz_summary))
     }
 
-    /// Merge multi-sample data (50 reference panel + 1 user = 51 samples) [DEPRECATED - use merge_and_stream_chromosomes]
-    #[allow(dead_code)]
-    async fn merge_chromosomes_multi_sample(
-        &self,
-        genome_data: &[Genome23Record],
-        vcf_data: &HashMap<u8, Vec<VCFRecord>>,
-        quality_threshold: QualityThreshold,
-    ) -> Result<HashMap<u8, Vec<MultiSampleVariant>>> {
-        let mut merged_chromosomes = HashMap::new();
-
-        // Convert QualityThreshold to ModelQualityThreshold
-        let model_threshold = match quality_threshold {
-            QualityThreshold::None => ModelQualityThreshold::NoFilter,
-            QualityThreshold::R080 => ModelQualityThreshold::R08,
-            QualityThreshold::R090 => ModelQualityThreshold::R09,
-        };
-
-        for chr in 1..=22u8 {
-            // Load reference panel for this chromosome only (to manage memory)
-            let ref_variants = tokio::task::spawn_blocking({
-                let path = self.reference_panel_path.clone();
-                let chr_num = chr;
-                move || -> Result<Vec<genetics_processor::models::ReferencePanelVariant>> {
-                    let reference_panel = ReferencePanelReader::open(&path)?;
-                    let variants = reference_panel.get_chromosome_variants(chr_num)?;
-                    Ok(variants)
-                }
-            })
-            .await??;
-
-            info!(
-                "Loaded {} reference panel variants for chromosome {}",
-                ref_variants.len(),
-                chr
-            );
-
-            // Filter genome data for this chromosome (23andMe uses String chromosomes)
-            let chr_str = chr.to_string();
-            let chr_genome: Vec<_> = genome_data
-                .iter()
-                .filter(|r| r.chromosome == chr_str)
-                .cloned()
-                .collect();
-
-            // Get VCF data for this chromosome
-            let chr_vcf = vcf_data.get(&chr).map(|v| v.as_slice()).unwrap_or(&[]);
-
-            // Merge multi-sample chromosome data
-            let merged = self.merge_single_chromosome_multi_sample(
-                chr,
-                &ref_variants,
-                &chr_genome,
-                chr_vcf,
-                model_threshold,
-            )?;
-
-            let variant_count = merged.len();
-            info!(
-                "Merged chromosome {}: {} variants × 51 samples",
-                chr, variant_count
-            );
-
-            // Explicitly drop reference variants to free memory before next chromosome
-            drop(ref_variants);
-
-            merged_chromosomes.insert(chr, merged);
-
-            // Publish progress for each chromosome
-            let progress = 60.0 + (chr as f32 / 22.0) * 15.0; // 60-75% range
-            self.publish_progress(
-                progress,
-                &format!("Merged chromosome {}/22 ({} variants)", chr, variant_count),
-            )
-            .await?;
-        }
-
-        Ok(merged_chromosomes)
-    }
-
-    /// Merge genotyped and imputed data (OLD single-sample method - deprecated)
-    #[allow(dead_code)]
-    async fn merge_chromosomes(
-        &self,
-        genome_data: &[Genome23Record],
-        vcf_data: &HashMap<u8, Vec<VCFRecord>>,
-        quality_threshold: QualityThreshold,
-    ) -> Result<HashMap<u8, Vec<MergedVariant>>> {
-        let mut merged_chromosomes = HashMap::new();
-
-        for chr in 1..=22u8 {
-            // Filter genome data for this chromosome (23andMe uses String chromosomes)
-            let chr_str = chr.to_string();
-            let chr_genome: Vec<_> = genome_data
-                .iter()
-                .filter(|r| r.chromosome == chr_str)
-                .cloned()
-                .collect();
-
-            // Get VCF data for this chromosome
-            let chr_vcf = vcf_data.get(&chr);
-
-            if chr_vcf.is_none() {
-                warn!("No VCF data for chromosome {}", chr);
-                continue;
-            }
-
-            // Merge chromosome data
-            let merged = self.merge_single_chromosome(
-                chr,
-                &chr_genome,
-                chr_vcf.unwrap(),
-                quality_threshold,
-            )?;
-
-            merged_chromosomes.insert(chr, merged);
-
-            // Publish progress for each chromosome
-            let progress = 60.0 + (chr as f32 / 22.0) * 15.0; // 60-75% range
-            self.publish_progress(progress, &format!("Merged chromosome {}/22", chr))
-                .await?;
-        }
-
-        Ok(merged_chromosomes)
-    }
-
-    /// Merge a single chromosome's data
-    fn merge_single_chromosome(
-        &self,
-        chr: u8,
-        genome_records: &[Genome23Record],
-        vcf_records: &[VCFRecord],
-        quality_threshold: QualityThreshold,
-    ) -> Result<Vec<MergedVariant>> {
-        // Build position-based lookup for genome data
-        let mut genotyped_by_pos: HashMap<u64, &Genome23Record> = HashMap::new();
-        for record in genome_records {
-            genotyped_by_pos.insert(record.position, record);
-        }
-
-        let mut merged = Vec::new();
-        let mut genotyped_count = 0;
-        let mut imputed_count = 0;
-        let mut filtered_count = 0;
-
-        for vcf_record in vcf_records {
-            // Check if we have genotyped data at this position
-            if let Some(genotyped) = genotyped_by_pos.get(&vcf_record.position) {
-                // Attempt to use 23andMe genotype (higher quality)
-                match genotype_to_dosage(
-                    &genotyped.genotype,
-                    &vcf_record.ref_allele,
-                    &vcf_record.alt_allele,
-                ) {
-                    Ok(Some(dosage)) => {
-                        // Successfully converted genotype to dosage
-                        merged.push(MergedVariant {
-                            rsid: vcf_record.rsid.clone(),
-                            chromosome: chr,
-                            position: vcf_record.position,
-                            ref_allele: vcf_record.ref_allele.clone(),
-                            alt_allele: vcf_record.alt_allele.clone(),
-                            dosage,
-                            source: DataSource::Genotyped,
-                            imputation_quality: None,
-                        });
-                        genotyped_count += 1;
-                    }
-                    Ok(None) | Err(_) => {
-                        // Missing genotype or conversion failed, use imputed dosage
-
-                        // Apply quality threshold filtering
-                        if let Some(threshold) = quality_threshold.value()
-                            && let Some(r2) = vcf_record.imputation_quality
-                            && r2 < threshold
-                        {
-                            // Skip this variant - doesn't meet quality threshold
-                            filtered_count += 1;
-                            continue;
-                        }
-
-                        let source = if vcf_record.imputation_quality.unwrap_or(1.0) < 0.3 {
-                            DataSource::ImputedLowQual
-                        } else {
-                            DataSource::Imputed
-                        };
-
-                        merged.push(MergedVariant {
-                            rsid: vcf_record.rsid.clone(),
-                            chromosome: chr,
-                            position: vcf_record.position,
-                            ref_allele: vcf_record.ref_allele.clone(),
-                            alt_allele: vcf_record.alt_allele.clone(),
-                            dosage: vcf_record.dosage,
-                            source,
-                            imputation_quality: vcf_record.imputation_quality,
-                        });
-                        imputed_count += 1;
-                    }
-                }
-            } else {
-                // No genotyped data, use imputed dosage
-
-                // Apply quality threshold filtering
-                if let Some(threshold) = quality_threshold.value()
-                    && let Some(r2) = vcf_record.imputation_quality
-                    && r2 < threshold
-                {
-                    // Skip this variant - doesn't meet quality threshold
-                    filtered_count += 1;
-                    continue;
-                }
-
-                let source = if vcf_record.imputation_quality.unwrap_or(1.0) < 0.3 {
-                    DataSource::ImputedLowQual
-                } else {
-                    DataSource::Imputed
-                };
-
-                merged.push(MergedVariant {
-                    rsid: vcf_record.rsid.clone(),
-                    chromosome: chr,
-                    position: vcf_record.position,
-                    ref_allele: vcf_record.ref_allele.clone(),
-                    alt_allele: vcf_record.alt_allele.clone(),
-                    dosage: vcf_record.dosage,
-                    source,
-                    imputation_quality: vcf_record.imputation_quality,
-                });
-                imputed_count += 1;
-            }
-        }
-
-        // Sort by position
-        merged.sort_by_key(|v| v.position);
-
-        info!(
-            "Chromosome {} merged: {} variants ({} genotyped, {} imputed, {} filtered by quality)",
-            chr,
-            merged.len(),
-            genotyped_count,
-            imputed_count,
-            filtered_count
-        );
-
-        Ok(merged)
-    }
-
     /// Merge a single chromosome's multi-sample data (50 reference + 1 user = 51 samples)
     fn merge_single_chromosome_multi_sample(
         &self,
@@ -814,16 +562,14 @@ impl JobProcessor {
         vcf_records: &[VCFRecord],
         quality_threshold: ModelQualityThreshold,
     ) -> Result<Vec<MultiSampleVariant>> {
-        // Build lookups for user data by (position, ref_allele, alt_allele)
-        let mut user_genotyped_lookup: HashMap<(u64, String, String), &Genome23Record> =
-            HashMap::new();
+        // 23andMe records by position (alleles are checked during the merge),
+        // imputed records by position, REF and ALT
+        let mut user_genotyped_lookup: HashMap<u64, Vec<&Genome23Record>> = HashMap::new();
         for record in genome_records {
-            let key = (
-                record.position,
-                record.genotype.chars().next().unwrap_or('-').to_string(),
-                record.genotype.chars().nth(1).unwrap_or('-').to_string(),
-            );
-            user_genotyped_lookup.insert(key, record);
+            user_genotyped_lookup
+                .entry(record.position)
+                .or_default()
+                .push(record);
         }
 
         let mut user_vcf_lookup: HashMap<(u64, String, String), &VCFRecord> = HashMap::new();
@@ -846,111 +592,20 @@ impl JobProcessor {
                 continue;
             }
 
-            // Build user sample (sample 51)
             let key = (
                 ref_variant.position,
                 ref_variant.ref_allele.clone(),
                 ref_variant.alt_allele.clone(),
             );
-
-            // Try genotyped data first, then VCF
-            let user_sample = if let Some(genotyped) = user_genotyped_lookup.get(&key) {
-                // User has genotyped data for this variant
-                match genotype_to_dosage(
-                    &genotyped.genotype,
-                    &ref_variant.ref_allele,
-                    &ref_variant.alt_allele,
-                ) {
-                    Ok(Some(dosage)) => SampleData {
-                        sample_id: "samp51".to_string(),
-                        genotype: format_dosage_as_genotype(dosage),
-                        dosage,
-                        source: DataSource::Genotyped,
-                        imputation_quality: None,
-                    },
-                    _ => {
-                        // Genotype conversion failed, try VCF
-                        if let Some(vcf) = user_vcf_lookup.get(&key) {
-                            let source = if vcf.imputation_quality.unwrap_or(1.0) < 0.3 {
-                                DataSource::ImputedLowQual
-                            } else {
-                                DataSource::Imputed
-                            };
-                            SampleData {
-                                sample_id: "samp51".to_string(),
-                                genotype: format_dosage_as_genotype(vcf.dosage),
-                                dosage: vcf.dosage,
-                                source,
-                                imputation_quality: vcf.imputation_quality,
-                            }
-                        } else {
-                            // User has no data, use reference/reference (0|0)
-                            SampleData {
-                                sample_id: "samp51".to_string(),
-                                genotype: "0|0".to_string(),
-                                dosage: 0.0,
-                                source: DataSource::Imputed,
-                                imputation_quality: ref_variant.imputation_quality,
-                            }
-                        }
-                    }
-                }
-            } else if let Some(vcf) = user_vcf_lookup.get(&key) {
-                // User has VCF data but not genotyped
-                let source = if vcf.imputation_quality.unwrap_or(1.0) < 0.3 {
-                    DataSource::ImputedLowQual
-                } else {
-                    DataSource::Imputed
-                };
-                SampleData {
-                    sample_id: "samp51".to_string(),
-                    genotype: format_dosage_as_genotype(vcf.dosage),
-                    dosage: vcf.dosage,
-                    source,
-                    imputation_quality: vcf.imputation_quality,
-                }
-            } else {
-                // User has no data for this variant, use reference/reference (0|0)
-                SampleData {
-                    sample_id: "samp51".to_string(),
-                    genotype: "0|0".to_string(),
-                    dosage: 0.0,
-                    source: DataSource::Imputed,
-                    imputation_quality: ref_variant.imputation_quality,
-                }
-            };
-
-            // Build samples vector: 50 reference + 1 user
-            let mut samples = Vec::with_capacity(51);
-            for (idx, genotype) in ref_variant.sample_genotypes.iter().enumerate() {
-                samples.push(SampleData {
-                    sample_id: format!("samp{}", idx + 1),
-                    genotype: genotype.clone(),
-                    dosage: calculate_dosage_from_genotype(genotype),
-                    source: if ref_variant.is_typed {
-                        DataSource::Genotyped
-                    } else {
-                        DataSource::Imputed
-                    },
-                    imputation_quality: ref_variant.imputation_quality,
-                });
-            }
-            samples.push(user_sample);
-
-            merged.push(MultiSampleVariant {
-                rsid: ref_variant
-                    .rsid
-                    .clone()
-                    .unwrap_or_else(|| format!("{}:{}", chr, ref_variant.position)),
-                chromosome: chr,
-                position: ref_variant.position,
-                ref_allele: ref_variant.ref_allele.clone(),
-                alt_allele: ref_variant.alt_allele.clone(),
-                allele_freq: ref_variant.allele_freq,
-                minor_allele_freq: ref_variant.minor_allele_freq,
-                is_typed: ref_variant.is_typed,
-                samples,
-            });
+            let genotyped = user_genotyped_lookup
+                .get(&ref_variant.position)
+                .map_or(&[][..], Vec::as_slice);
+            merged.push(merge_variant(
+                chr,
+                ref_variant,
+                genotyped,
+                user_vcf_lookup.get(&key).copied(),
+            ));
         }
 
         info!(
@@ -961,69 +616,6 @@ impl JobProcessor {
         );
 
         Ok(merged)
-    }
-
-    /// Generate output files in requested formats (OLD single-sample - deprecated)
-    #[allow(dead_code)]
-    async fn generate_outputs(
-        &self,
-        merged_chromosomes: &HashMap<u8, Vec<MergedVariant>>,
-        pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
-        output_formats: &[OutputFormat],
-    ) -> Result<HashMap<String, PathBuf>> {
-        let output_gen = OutputGenerator::new(
-            self.job_id.to_string(),
-            self.user_id.clone(),
-            self.output_dir.clone(),
-        );
-
-        let total_formats = output_formats.len();
-        let mut result = HashMap::new();
-
-        for (idx, format) in output_formats.iter().enumerate() {
-            let format_name = match format {
-                OutputFormat::Parquet => "Parquet",
-                OutputFormat::Sqlite => "SQLite",
-                OutputFormat::Vcf => "VCF",
-            };
-
-            self.publish_progress(
-                80.0 + ((idx as f32 / total_formats as f32) * 15.0),
-                &format!(
-                    "Generating {} output ({}/{})",
-                    format_name,
-                    idx + 1,
-                    total_formats
-                ),
-            )
-            .await?;
-
-            // Convert single format to ProcessorOutputFormat
-            let processor_format = match format {
-                OutputFormat::Parquet => ProcessorOutputFormat::Parquet,
-                OutputFormat::Sqlite => ProcessorOutputFormat::Sqlite,
-                OutputFormat::Vcf => ProcessorOutputFormat::Vcf,
-            };
-
-            let output_paths = output_gen
-                .generate(&[processor_format], merged_chromosomes, pgs_data)
-                .await
-                .context(format!("Failed to generate {} output", format_name))?;
-
-            // Add to results
-            for (fmt, path) in output_paths {
-                let file_size = tokio::fs::metadata(&path).await.ok().map(|m| m.len());
-
-                if let Some(size) = file_size {
-                    let size_mb = size as f64 / 1_048_576.0;
-                    info!("Generated {} output: {:.2} MB", format_name, size_mb);
-                }
-
-                result.insert(format!("{:?}", fmt), path);
-            }
-        }
-
-        Ok(result)
     }
 
     /// Record output file metadata in database
@@ -1099,35 +691,6 @@ impl JobProcessor {
 
         Ok(())
     }
-}
-
-/// Convert dosage value (0.0-2.0) to phased genotype string
-fn format_dosage_as_genotype(dosage: f64) -> String {
-    // Round to nearest 0.5 for determining allele counts
-    let rounded = (dosage * 2.0).round() / 2.0;
-
-    match rounded {
-        d if d <= 0.25 => "0|0".to_string(), // Reference/Reference
-        d if d <= 0.75 => "0|1".to_string(), // Reference/Alt (assume phased)
-        d if d <= 1.25 => "0|1".to_string(), // Het (dosage ~1.0)
-        d if d <= 1.75 => "1|1".to_string(), // Alt/Alt (dosage ~1.5-1.75)
-        _ => "1|1".to_string(),              // Alt/Alt
-    }
-}
-
-/// Calculate dosage from phased genotype string
-fn calculate_dosage_from_genotype(genotype: &str) -> f64 {
-    // Handle both phased (|) and unphased (/) separators
-    let alleles: Vec<&str> = genotype.split(['|', '/']).collect();
-
-    if alleles.len() != 2 {
-        return 0.0; // Default for invalid genotype
-    }
-
-    let a1 = alleles[0].parse::<u8>().unwrap_or(0);
-    let a2 = alleles[1].parse::<u8>().unwrap_or(0);
-
-    (a1 + a2) as f64
 }
 
 /// Uploaded files structure

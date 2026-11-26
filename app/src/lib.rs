@@ -10,6 +10,7 @@
 
 pub mod audit;
 pub mod genotype_converter;
+pub mod merge;
 pub mod models;
 pub mod output;
 pub mod parsers;

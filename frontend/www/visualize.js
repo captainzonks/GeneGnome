@@ -4,7 +4,7 @@
 // Description: Fetches visualization data via token+password and renders charts
 // Author: Matt Barham
 // Created: 2026-04-02
-// Version: 1.1.0
+// Version: 1.2.0
 // ==============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -257,10 +257,11 @@ function createSourceChart(c) {
     new Chart(canvas, {
         type: 'doughnut',
         data: {
-            labels: ['Genotyped', 'Imputed', 'Low Quality'],
+            labels: ['Genotyped', 'Imputed', 'Low Quality', 'Missing'],
             datasets: [{
-                data: [src.genotyped, src.imputed, src.imputed_low_quality],
-                backgroundColor: [c.primary, c.secondary, c.warning],
+                // Jobs processed by older releases have no missing count
+                data: [src.genotyped, src.imputed, src.imputed_low_quality, src.missing ?? 0],
+                backgroundColor: [c.primary, c.secondary, c.warning, c.textMuted],
                 borderColor: c.cardBg,
                 borderWidth: 2,
             }],
