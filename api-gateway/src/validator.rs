@@ -4,8 +4,8 @@
 // Description: Validates uploaded files at API layer before writing to disk
 // Author: Matt Barham
 // Created: 2025-11-26
-// Modified: 2025-11-26
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.0.1
 // Security: Allowlist-only file types, magic number verification, size limits
 // ==============================================================================
 
@@ -20,6 +20,7 @@ use tracing::{debug, info};
 const MAX_GENOME_FILE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
 const MAX_VCF_FILE_SIZE: usize = 200 * 1024 * 1024; // 200 MB
 const MAX_PGS_FILE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+const PGS_EXTENSIONS: [&str; 3] = ["txt", "csv", "pgs"];
 const MAX_CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50 MB per chunk
 
 #[derive(Debug)]
@@ -45,9 +46,6 @@ impl FileValidator {
 
         // BGZF tabix index
         allowed_types.insert("vcf.gz.tbi".to_string(), vec![0x1f, 0x8b, 0x08]);
-
-        // PGS score files
-        allowed_types.insert("pgs".to_string(), vec![]);
 
         Self { allowed_types }
     }
@@ -87,7 +85,14 @@ impl FileValidator {
 
         // 3. Extension check (allowlist)
         let ext = self.get_extension(&safe_name)?;
-        if !self.allowed_types.contains_key(&ext) {
+        // Score tables have their own extension list, so that adding one never
+        // widens what a genome or VCF upload may be called.
+        let allowed = if file_type == "pgs" {
+            PGS_EXTENSIONS.contains(&ext.as_str())
+        } else {
+            self.allowed_types.contains_key(&ext)
+        };
+        if !allowed {
             anyhow::bail!("Invalid file type: .{}", ext);
         }
         debug!("Extension check passed: .{}", ext);
@@ -107,7 +112,11 @@ impl FileValidator {
         }
 
         // 5. Content validation (basic format check)
-        self.validate_content(file_data, &ext)?;
+        if file_type == "pgs" {
+            self.validate_pgs_format(file_data)?;
+        } else {
+            self.validate_content(file_data, &ext)?;
+        }
         debug!("Content validation passed");
 
         // 6. Compute SHA-256 hash
@@ -151,9 +160,6 @@ impl FileValidator {
             return Ok("vcf.gz".to_string());
         } else if filename.ends_with(".vcf.gz.tbi") {
             return Ok("vcf.gz.tbi".to_string());
-        } else if filename.ends_with(".pgs") || filename.ends_with(".txt.gz") {
-            // PGS files can be .pgs or .txt.gz
-            return Ok("pgs".to_string());
         }
 
         // Single extension
@@ -173,7 +179,6 @@ impl FileValidator {
             "txt" => self.validate_23andme_format(data),
             "vcf.gz" => self.validate_vcf_format(data),
             "vcf.gz.tbi" => Ok(()), // Tabix index, no content validation needed
-            "pgs" => self.validate_pgs_format(data),
             _ => Ok(()),
         }
     }
@@ -229,26 +234,28 @@ impl FileValidator {
         Ok(())
     }
 
+    /// Checks the header of a precomputed score table. The two accepted layouts
+    /// match the parser in app/src/parsers/pgs.rs:
+    /// wide `sample,<score>,...` and long `ID,PGS_label,score_value`.
     fn validate_pgs_format(&self, data: &Bytes) -> Result<()> {
-        // PGS files are tab-separated or space-separated text files
-        // Should have at least a header line with rsid and effect columns
-        let reader = BufReader::new(&data[..]);
-        let lines = reader.lines();
+        let header = BufReader::new(&data[..])
+            .lines()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("PGS file is empty"))??;
+        let columns: Vec<&str> = header
+            .split(',')
+            .map(|c| c.trim().trim_matches('"'))
+            .collect();
 
-        // Check first non-comment line
-        for line in lines.take(100) {
-            let line = line?;
-            if !line.starts_with('#') && !line.trim().is_empty() {
-                // Should have at least 2 columns
-                let columns: Vec<&str> = line.split_whitespace().collect();
-                if columns.len() < 2 {
-                    anyhow::bail!(
-                        "Invalid PGS format: expected at least 2 columns, found {}",
-                        columns.len()
-                    );
-                }
-                break;
-            }
+        let wide = columns.len() >= 2 && columns[0] == "sample";
+        let long = ["ID", "PGS_label", "score_value"]
+            .iter()
+            .all(|name| columns.contains(name));
+        if !wide && !long {
+            anyhow::bail!(
+                "Invalid PGS format: expected a CSV header of 'sample,<score>,...' \
+                 or 'ID,PGS_label,score_value'"
+            );
         }
 
         Ok(())
@@ -366,6 +373,53 @@ mod tests {
         assert_eq!(
             validator.get_extension("chr1.dose.vcf.gz.tbi").unwrap(),
             "vcf.gz.tbi"
+        );
+    }
+
+    #[test]
+    fn accepts_michigan_wide_scores_named_scores_txt() {
+        let data =
+            Bytes::from_static(b"\"sample\",\"PGS000008\",\"PGS000006\"\n\"samp1\",0.365,-0.3\n");
+        let validator = FileValidator::new();
+        assert!(
+            validator
+                .validate_upload("scores.txt", &data, "pgs")
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn accepts_long_form_scores() {
+        let data = Bytes::from_static(b"ID,PGS_label,score_value\nsamp1,Height,1.2\n");
+        let validator = FileValidator::new();
+        for name in ["scores.txt", "mine.pgs", "scores.csv"] {
+            assert!(
+                validator.validate_upload(name, &data, "pgs").is_ok(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_files_that_are_not_score_tables() {
+        let validator = FileValidator::new();
+        let genome = Bytes::from_static(b"# 23andMe\nrs1\t1\t100\tAA\n");
+        assert!(
+            validator
+                .validate_upload("scores.txt", &genome, "pgs")
+                .is_err()
+        );
+        let scores = Bytes::from_static(b"ID,PGS_label,score_value\nsamp1,Height,1.2\n");
+        assert!(
+            validator
+                .validate_upload("scores.vcf.gz", &scores, "pgs")
+                .is_err()
+        );
+        let empty = Bytes::new();
+        assert!(
+            validator
+                .validate_upload("scores.txt", &empty, "pgs")
+                .is_err()
         );
     }
 

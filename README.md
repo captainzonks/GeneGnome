@@ -8,8 +8,8 @@ Description: Overview, architecture, deployment, security model, and measured
              performance for the GeneGnome genetic data processing platform
 Author: Matt Barham
 Created: 2025-11-22
-Modified: 2026-09-27
-Version: 1.3.2
+Modified: 2026-11-26
+Version: 1.3.3
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -473,7 +473,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 68 tests: app 42, api-gateway 17, worker 9
+# Test — 75 tests: app 45, api-gateway 20, worker 10
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test

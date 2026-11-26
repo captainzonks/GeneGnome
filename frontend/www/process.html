@@ -98,7 +98,7 @@
                 </div>
                 <div class="requirement">
                     <strong>3. PGS Scores (optional)</strong>
-                    <code>scores.txt or *.pgs</code>
+                    <code>scores.txt, *scores*.csv or *.pgs</code>
                     <span class="file-size">~1MB</span>
                 </div>
             </div>
@@ -111,7 +111,7 @@
             <!-- Upload Section -->
             <section id="uploadSection" class="upload-section">
                 <h2>Upload Your Files</h2>
-                <p class="help-text">Upload your original 23andMe data, imputed VCF files (chr1-22), and PGS scores</p>
+                <p class="help-text">Upload your original 23andMe data, imputed VCF files (chr1-22), and, optionally, a PGS scores file</p>
 
                 <!-- File Drop Zone -->
                 <div id="dropZone" class="drop-zone">
@@ -298,8 +298,8 @@
                     <div class="processing-step" data-step="pgs">
                         <div class="step-icon">📊</div>
                         <div class="step-info">
-                            <strong>Calculating PGS Scores</strong>
-                            <p>Computing polygenic risk scores...</p>
+                            <strong>Adding PGS Scores</strong>
+                            <p>Including your uploaded polygenic scores...</p>
                         </div>
                         <div class="step-status">⏳</div>
                     </div>
@@ -404,7 +404,7 @@
 
     <script src="darkmode.js?v=20260403"></script>
     <script src="themes.js?v=20260403"></script>
-    <script src="upload.js?v=20260403"></script>
+    <script src="upload.js?v=20261126"></script>
     <script src="progress.js?v=20260403"></script>
 </body>
 </html>

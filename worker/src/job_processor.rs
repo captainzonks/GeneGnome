@@ -4,8 +4,8 @@
 // Description: Execute genetics processor on uploaded files
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-04-02
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.1.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -26,7 +26,7 @@ use genetics_processor::models::{
 use genetics_processor::output::{OutputFormat as ProcessorOutputFormat, OutputGenerator};
 use genetics_processor::parsers::{
     genome23andme::{Genome23Parser, Genome23Record},
-    pgs::PgsParser,
+    pgs::{PgsParser, is_scores_filename},
     vcf::{VCFParser, VCFRecord},
 };
 use genetics_processor::processor::DataSource;
@@ -34,6 +34,26 @@ use genetics_processor::reference_panel::ReferencePanelReader;
 
 use crate::db;
 use crate::queue::{JobQueue, OutputFormat, QualityThreshold};
+
+/// What an uploaded file is, judged by its name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UploadKind {
+    Genome,
+    Vcf,
+    Scores,
+}
+
+fn classify_upload(name: &str) -> Option<UploadKind> {
+    if is_scores_filename(name) {
+        Some(UploadKind::Scores)
+    } else if name.ends_with(".txt") {
+        Some(UploadKind::Genome)
+    } else if name.ends_with(".vcf.gz") || name.ends_with(".vcf") {
+        Some(UploadKind::Vcf)
+    } else {
+        None
+    }
+}
 
 /// Job processor that executes genetics data merging
 pub struct JobProcessor {
@@ -187,7 +207,7 @@ impl JobProcessor {
         // Step 5: Parse PGS scores (optional)
         self.publish_progress(45.0, "Parsing polygenic scores file")
             .await?;
-        let pgs_data = self.parse_pgs_file(&files.pgs_file).await;
+        let pgs_data = self.parse_pgs_file(&files.pgs_file).await?;
         if let Some(ref data) = pgs_data {
             info!("Parsed {} PGS records", data.unscaled.len());
             let trait_count = data
@@ -257,12 +277,11 @@ impl JobProcessor {
             let filename = entry.file_name();
             let filename_str = filename.to_string_lossy();
 
-            if filename_str.ends_with(".txt") && !filename_str.contains("scores") {
-                genome_file = Some(path);
-            } else if filename_str.ends_with(".vcf.gz") || filename_str.ends_with(".vcf") {
-                vcf_files.push(path);
-            } else if filename_str.contains("scores") && filename_str.ends_with(".txt") {
-                pgs_file = Some(path);
+            match classify_upload(&filename_str) {
+                Some(UploadKind::Genome) => genome_file = Some(path),
+                Some(UploadKind::Vcf) => vcf_files.push(path),
+                Some(UploadKind::Scores) => pgs_file = Some(path),
+                None => {}
             }
         }
 
@@ -320,32 +339,20 @@ impl JobProcessor {
         Ok(all_records)
     }
 
-    /// Parse PGS scores file
+    /// Parse the uploaded PGS scores file, if there is one. A file that cannot
+    /// be parsed fails the job: results must not silently omit uploaded scores.
     async fn parse_pgs_file(
         &self,
         path: &Option<PathBuf>,
-    ) -> Option<genetics_processor::parsers::pgs::PgsDataset> {
-        let path = match path {
-            Some(p) => p,
-            None => {
-                warn!("No PGS scores file provided, continuing without PGS data");
-                return None;
-            }
+    ) -> Result<Option<genetics_processor::parsers::pgs::PgsDataset>> {
+        let Some(path) = path else {
+            info!("No PGS scores file provided, continuing without PGS data");
+            return Ok(None);
         };
 
-        match PgsParser::parse(path) {
-            Ok(dataset) => {
-                info!("Successfully parsed PGS scores file");
-                Some(dataset)
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to parse PGS scores file ({}), continuing without PGS data",
-                    e
-                );
-                None
-            }
-        }
+        let dataset = PgsParser::parse(path).context("Failed to parse PGS scores file")?;
+        info!("Successfully parsed PGS scores file");
+        Ok(Some(dataset))
     }
 
     /// Merge and stream output chromosome-by-chromosome (memory-efficient)
@@ -356,8 +363,7 @@ impl JobProcessor {
         &self,
         genome_data: &[Genome23Record],
         vcf_data: &HashMap<u8, Vec<VCFRecord>>,
-        // Not yet written by the streaming path: uploaded scores are parsed, then dropped
-        _pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
+        pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
         quality_threshold: QualityThreshold,
         output_formats: &[OutputFormat],
     ) -> Result<(
@@ -416,6 +422,11 @@ impl JobProcessor {
             .initialize_streaming_output(&processor_formats, vcf_format)
             .await?;
         info!("✓ Streaming output initialized (files created, headers written)");
+
+        let pgs_csv_path = match pgs_data {
+            Some(scores) => Some(output_gen.write_pgs_scores(scores)?),
+            None => None,
+        };
 
         // Process each chromosome and stream output immediately
         for chr in 1..=22u8 {
@@ -523,10 +534,13 @@ impl JobProcessor {
         info!("✓ Output finalization complete!");
 
         // Convert HashMap<OutputFormat, PathBuf> to HashMap<String, PathBuf>
-        let output_paths: HashMap<String, PathBuf> = output_paths_map
+        let mut output_paths: HashMap<String, PathBuf> = output_paths_map
             .into_iter()
             .map(|(fmt, path)| (format!("{:?}", fmt), path))
             .collect();
+        if let Some(path) = pgs_csv_path {
+            output_paths.insert("PgsScores".to_string(), path);
+        }
 
         info!("════════════════════════════════════════════════════════════════");
         info!("✓ STREAMING PROCESSING COMPLETE!");
@@ -1121,4 +1135,20 @@ struct UploadedFiles {
     genome_file: PathBuf,
     vcf_files: Vec<PathBuf>,
     pgs_file: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_uploads_by_name() {
+        assert_eq!(classify_upload("scores.txt"), Some(UploadKind::Scores));
+        assert_eq!(classify_upload("My_Scores.csv"), Some(UploadKind::Scores));
+        assert_eq!(classify_upload("traits.pgs"), Some(UploadKind::Scores));
+        assert_eq!(classify_upload("genome_v5.txt"), Some(UploadKind::Genome));
+        assert_eq!(classify_upload("export.txt"), Some(UploadKind::Genome));
+        assert_eq!(classify_upload("chr1.dose.vcf.gz"), Some(UploadKind::Vcf));
+        assert_eq!(classify_upload("chr1.dose.vcf.gz.tbi"), None);
+    }
 }
