@@ -6,10 +6,10 @@
 // Created: 2025-11-03
 // ==============================================================================
 
-use std::io::{BufRead, BufReader};
-use std::fs::File;
-use std::env;
 use flate2::read::MultiGzDecoder;
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get file path from command line
@@ -68,7 +68,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if count == 0 {
             println!("\nSkipped {} header lines total\n", header_count);
-            println!("First data line (first 100 chars): {}\n", &line[..std::cmp::min(100, line.len())]);
+            println!(
+                "First data line (first 100 chars): {}\n",
+                &line[..std::cmp::min(100, line.len())]
+            );
         }
 
         count += 1;
@@ -112,8 +115,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ds_sum += ds;
 
                     if count <= 10 {
-                        println!("{:<15} DS={:.4}  R2={}", rsid, ds,
-                            r2.map(|v| format!("{:.4}", v)).unwrap_or("N/A".to_string()));
+                        println!(
+                            "{:<15} DS={:.4}  R2={}",
+                            rsid,
+                            ds,
+                            r2.map(|v| format!("{:.4}", v)).unwrap_or("N/A".to_string())
+                        );
                     }
                 }
             }

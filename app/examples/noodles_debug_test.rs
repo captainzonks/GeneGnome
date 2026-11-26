@@ -13,15 +13,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let vcf_path = &args[1];
 
-    let mut reader = vcf::io::reader::Builder::default()
-        .build_from_path(vcf_path)?;
+    let mut reader = vcf::io::reader::Builder::default().build_from_path(vcf_path)?;
 
     let _header = reader.read_header()?;
 
     if let Some(Ok(record)) = reader.records().next() {
         let debug_str = format!("{:?}", record);
         println!("Debug output length: {}", debug_str.len());
-        println!("\nFirst 500 chars:\n{}", &debug_str[..std::cmp::min(500, debug_str.len())]);
+        println!(
+            "\nFirst 500 chars:\n{}",
+            &debug_str[..std::cmp::min(500, debug_str.len())]
+        );
         println!("\n---");
 
         // Try to find various patterns
@@ -33,7 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(pos) = debug_str.find("Record") {
             println!("Found 'Record' at position: {}", pos);
-            println!("Context: {}", &debug_str[pos..std::cmp::min(pos+100, debug_str.len())]);
+            println!(
+                "Context: {}",
+                &debug_str[pos..std::cmp::min(pos + 100, debug_str.len())]
+            );
         }
     }
 

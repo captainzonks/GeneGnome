@@ -1,7 +1,7 @@
-use std::io::{BufRead, BufReader};
-use std::fs::File;
-use std::env;
 use flate2::read::MultiGzDecoder;
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();

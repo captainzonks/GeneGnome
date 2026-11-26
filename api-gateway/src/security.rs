@@ -11,10 +11,10 @@
 
 use anyhow::{Context, Result};
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2, Algorithm, Params, Version,
+    Algorithm, Argon2, Params, Version,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::Rng;
 
 // ==============================================================================
@@ -140,8 +140,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 
     // Configure Argon2id with secure parameters
     // Memory: 47104 KiB (46 MiB), Iterations: 3, Parallelism: 4
-    let params = Params::new(47104, 3, 4, None)
-        .context("Failed to create Argon2 parameters")?;
+    let params = Params::new(47104, 3, 4, None).context("Failed to create Argon2 parameters")?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
@@ -176,8 +175,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// - The hash string is malformed
 /// - Password verification fails
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
-    let parsed_hash = PasswordHash::new(hash)
-        .context("Failed to parse password hash")?;
+    let parsed_hash = PasswordHash::new(hash).context("Failed to parse password hash")?;
 
     let argon2 = Argon2::default();
 
@@ -251,7 +249,11 @@ mod tests {
         assert_eq!(token.len(), 43);
 
         // Should only contain URL-safe base64 characters
-        assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        );
 
         // Two tokens should be different
         let token2 = generate_download_token().unwrap();

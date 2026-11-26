@@ -9,18 +9,18 @@
 // ==============================================================================
 
 use anyhow::{Context, Result};
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use sqlx::PgPool;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::secure_delete;
 use crate::audit;
-use crate::parsers::{Genome23Parser, Genome23Record, PgsParser, PgsDataset, VCFParser};
 use crate::genotype_converter::genotype_to_dosage;
-use crate::models::{MultiSampleVariant, SampleData, QualityThreshold};
+use crate::models::{MultiSampleVariant, QualityThreshold, SampleData};
+use crate::parsers::{Genome23Parser, Genome23Record, PgsDataset, PgsParser, VCFParser};
 use crate::reference_panel::ReferencePanelReader;
+use crate::secure_delete;
 
 // Re-export for backward compatibility with worker
 pub use crate::models::{DataSource, MergedVariant};
@@ -55,7 +55,10 @@ impl GeneticsProcessor {
 
     /// Main processing pipeline
     pub async fn process(&self) -> Result<PathBuf> {
-        info!("Starting 51-sample genetic data processing for job {}", self.job_id);
+        info!(
+            "Starting 51-sample genetic data processing for job {}",
+            self.job_id
+        );
         info!("Quality threshold: {:?}", self.quality_threshold);
 
         // 1. Locate input files
@@ -66,11 +69,15 @@ impl GeneticsProcessor {
         self.validate_file_set(&files)?;
 
         // 3. Open reference panel database
-        info!("Opening reference panel database: {:?}", self.reference_path);
+        info!(
+            "Opening reference panel database: {:?}",
+            self.reference_path
+        );
         let reference_panel = ReferencePanelReader::open(&self.reference_path)
             .context("Failed to open reference panel database")?;
 
-        reference_panel.validate()
+        reference_panel
+            .validate()
             .context("Reference panel validation failed")?;
 
         // 4. Parse 23andMe data
@@ -82,7 +89,9 @@ impl GeneticsProcessor {
         let mut merged_chromosomes: HashMap<u8, Vec<MultiSampleVariant>> = HashMap::new();
 
         for chr in 1..=22 {
-            let merged = self.process_chromosome(chr, &files, &reference_panel).await?;
+            let merged = self
+                .process_chromosome(chr, &files, &reference_panel)
+                .await?;
             merged_chromosomes.insert(chr, merged);
         }
 
@@ -94,7 +103,9 @@ impl GeneticsProcessor {
             .values()
             .flat_map(|v| v.iter())
             .filter(|variant| {
-                variant.samples.iter()
+                variant
+                    .samples
+                    .iter()
                     .find(|s| s.sample_id == "samp51")
                     .map(|s| s.source == DataSource::Genotyped)
                     .unwrap_or(false)
@@ -112,7 +123,9 @@ impl GeneticsProcessor {
 
         // 7. Generate output file
         info!("Generating output file");
-        let result_path = self.generate_output_file(&merged_chromosomes, &pgs_data).await?;
+        let result_path = self
+            .generate_output_file(&merged_chromosomes, &pgs_data)
+            .await?;
 
         // 8. Securely delete all input files
         info!("Securely deleting input files");
@@ -156,7 +169,8 @@ impl GeneticsProcessor {
         }
 
         Ok(InputFiles {
-            genome_file: genome_file.ok_or_else(|| anyhow::anyhow!("23andMe genome file not found"))?,
+            genome_file: genome_file
+                .ok_or_else(|| anyhow::anyhow!("23andMe genome file not found"))?,
             vcf_files,
             pgs_file: pgs_file.ok_or_else(|| anyhow::anyhow!("PGS scores file not found"))?,
         })
@@ -165,21 +179,16 @@ impl GeneticsProcessor {
     fn validate_file_set(&self, files: &InputFiles) -> Result<()> {
         // Must have exactly 22 VCF files (one per chromosome)
         if files.vcf_files.len() != 22 {
-            anyhow::bail!(
-                "Expected 22 VCF files, found {}",
-                files.vcf_files.len()
-            );
+            anyhow::bail!("Expected 22 VCF files, found {}", files.vcf_files.len());
         }
 
         // Check each chromosome VCF exists
         for chr in 1..=22 {
             let expected = format!("chr{}.dose.vcf.gz", chr);
-            let found = files.vcf_files.iter().any(|p| {
-                p.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .contains(&expected)
-            });
+            let found = files
+                .vcf_files
+                .iter()
+                .any(|p| p.file_name().unwrap().to_string_lossy().contains(&expected));
 
             if !found {
                 anyhow::bail!("Missing VCF file for chromosome {}", chr);
@@ -189,7 +198,6 @@ impl GeneticsProcessor {
         Ok(())
     }
 
-
     async fn parse_23andme(&self, path: &Path) -> Result<UserGenomeData> {
         info!("Parsing 23andMe genome file: {:?}", path);
 
@@ -197,7 +205,8 @@ impl GeneticsProcessor {
         let parser = Genome23Parser::autosomal_only();
 
         // Parse the file
-        let records = parser.parse(path)
+        let records = parser
+            .parse(path)
             .context("Failed to parse 23andMe genome file")?;
 
         info!("Parsed {} SNPs from 23andMe file", records.len());
@@ -214,10 +223,15 @@ impl GeneticsProcessor {
         info!("Processing chromosome {} with 51-sample merge", chr);
 
         // 1. Load reference panel variants for this chromosome (50 samples)
-        let ref_variants = reference_panel.get_chromosome_variants(chr)
+        let ref_variants = reference_panel
+            .get_chromosome_variants(chr)
             .context(format!("Failed to load reference panel for chr{}", chr))?;
 
-        info!("Loaded {} reference panel variants for chr{}", ref_variants.len(), chr);
+        info!(
+            "Loaded {} reference panel variants for chr{}",
+            ref_variants.len(),
+            chr
+        );
 
         // 2. Parse user's VCF file (imputed data)
         let vcf_path = files
@@ -237,12 +251,20 @@ impl GeneticsProcessor {
             .parse(vcf_path)
             .context(format!("Failed to parse VCF for chromosome {}", chr))?;
 
-        info!("Parsed {} user imputed variants for chr{}", user_vcf_records.len(), chr);
+        info!(
+            "Parsed {} user imputed variants for chr{}",
+            user_vcf_records.len(),
+            chr
+        );
 
         // 3. Parse user's 23andMe data (genotyped data)
         let user_genome_records = self.load_23andme_for_chr(chr, &files.genome_file).await?;
 
-        info!("Loaded {} user genotyped variants for chr{}", user_genome_records.len(), chr);
+        info!(
+            "Loaded {} user genotyped variants for chr{}",
+            user_genome_records.len(),
+            chr
+        );
 
         // 4. Build lookups for user data
         // Key: (position, ref_allele, alt_allele)
@@ -277,7 +299,10 @@ impl GeneticsProcessor {
             );
 
             // Apply quality filtering
-            if !self.quality_threshold.passes(ref_variant.imputation_quality) {
+            if !self
+                .quality_threshold
+                .passes(ref_variant.imputation_quality)
+            {
                 filtered_by_quality += 1;
                 continue;
             }
@@ -384,7 +409,9 @@ impl GeneticsProcessor {
 
             // Create multi-sample variant
             merged.push(MultiSampleVariant {
-                rsid: ref_variant.rsid.unwrap_or_else(|| format!("chr{}:{}", chr, ref_variant.position)),
+                rsid: ref_variant
+                    .rsid
+                    .unwrap_or_else(|| format!("chr{}:{}", chr, ref_variant.position)),
                 chromosome: chr,
                 position: ref_variant.position,
                 ref_allele: ref_variant.ref_allele.clone(),
@@ -408,7 +435,11 @@ impl GeneticsProcessor {
         Ok(merged)
     }
 
-    async fn load_23andme_for_chr(&self, chr: u8, genome_file: &Path) -> Result<Vec<Genome23Record>> {
+    async fn load_23andme_for_chr(
+        &self,
+        chr: u8,
+        genome_file: &Path,
+    ) -> Result<Vec<Genome23Record>> {
         debug!("Loading 23andMe data for chromosome {}", chr);
 
         // Parse 23andMe file (parser caches internally for efficiency)
@@ -437,8 +468,7 @@ impl GeneticsProcessor {
         info!("Parsing PGS scores from {:?}", path);
 
         // Parse PGS file with automatic z-score normalization
-        let dataset = PgsParser::parse(path)
-            .context("Failed to parse PGS scores file")?;
+        let dataset = PgsParser::parse(path).context("Failed to parse PGS scores file")?;
 
         info!(
             "Parsed {} PGS records (unscaled: {}, scaled: {})",
@@ -494,7 +524,8 @@ impl GeneticsProcessor {
                 let user_genotyped = variants
                     .iter()
                     .filter(|v| {
-                        v.samples.iter()
+                        v.samples
+                            .iter()
                             .find(|s| s.sample_id == "samp51")
                             .map(|s| s.source == DataSource::Genotyped)
                             .unwrap_or(false)

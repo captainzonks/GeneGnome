@@ -18,9 +18,9 @@ use tracing::{debug, info, warn};
 
 // Maximum file sizes (enforced at validation layer)
 const MAX_GENOME_FILE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
-const MAX_VCF_FILE_SIZE: usize = 200 * 1024 * 1024;    // 200 MB
-const MAX_PGS_FILE_SIZE: usize = 10 * 1024 * 1024;     // 10 MB
-const MAX_CHUNK_SIZE: usize = 50 * 1024 * 1024;        // 50 MB per chunk
+const MAX_VCF_FILE_SIZE: usize = 200 * 1024 * 1024; // 200 MB
+const MAX_PGS_FILE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+const MAX_CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50 MB per chunk
 
 #[derive(Debug)]
 pub struct ValidatedFile {
@@ -171,8 +171,7 @@ impl FileValidator {
     }
 
     fn verify_magic_number(&self, expected: &[u8], actual: &[u8]) -> bool {
-        expected.len() <= actual.len()
-            && expected.iter().zip(actual.iter()).all(|(e, a)| e == a)
+        expected.len() <= actual.len() && expected.iter().zip(actual.iter()).all(|(e, a)| e == a)
     }
 
     fn validate_content(&self, data: &Bytes, ext: &str) -> Result<()> {
@@ -300,10 +299,7 @@ impl FileValidator {
 
         // 4. Reasonable total chunks (prevent excessive chunking)
         if total_chunks > 100 {
-            anyhow::bail!(
-                "Too many chunks: {} (max: 100)",
-                total_chunks
-            );
+            anyhow::bail!("Too many chunks: {} (max: 100)", total_chunks);
         }
 
         Ok(safe_name)

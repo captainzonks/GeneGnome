@@ -9,7 +9,7 @@
 // ==============================================================================
 
 use genetics_processor::genotype_converter::{
-    genotype_to_dosage, genotype_to_dosage_with_flip, batch_convert_genotypes,
+    batch_convert_genotypes, genotype_to_dosage, genotype_to_dosage_with_flip,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("--", "T", "C", "No Call (missing)"),
     ];
 
-    println!("{:<12} {:<6} {:<6} {:<10} {}", "Genotype", "REF", "ALT", "Dosage", "Type");
+    println!(
+        "{:<12} {:<6} {:<6} {:<10} {}",
+        "Genotype", "REF", "ALT", "Dosage", "Type"
+    );
     println!("{:-<60}", "");
 
     for (genotype, ref_allele, alt_allele, description) in conversions {
@@ -122,10 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Succeeded"
             }
         );
-        println!(
-            "    With flip: dosage = {}",
-            flip_result.unwrap_or(-1.0)
-        );
+        println!("    With flip: dosage = {}", flip_result.unwrap_or(-1.0));
     }
 
     // Example 5: Batch conversion
@@ -143,7 +143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let results = batch_convert_genotypes(batch.clone());
 
-    println!("{:<12} {:<6} {:<6} {:<10}", "Genotype", "REF", "ALT", "Dosage");
+    println!(
+        "{:<12} {:<6} {:<6} {:<10}",
+        "Genotype", "REF", "ALT", "Dosage"
+    );
     println!("{:-<40}", "");
 
     for (i, (genotype, ref_allele, alt_allele)) in batch.iter().enumerate() {
@@ -161,7 +164,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             Err(e) => {
-                println!("{:<12} {:<6} {:<6} Error: {}", genotype, ref_allele, alt_allele, e);
+                println!(
+                    "{:<12} {:<6} {:<6} Error: {}",
+                    genotype, ref_allele, alt_allele, e
+                );
             }
         }
     }
@@ -179,13 +185,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulated 23andMe genotypes at the same positions
     let genotypes_23andme = vec![
-        (69869, "TT"), // User has homozygous ref
-        (74792, "--"), // Missing - use imputed
+        (69869, "TT"),  // User has homozygous ref
+        (74792, "--"),  // Missing - use imputed
         (565508, "AG"), // User has heterozygous
     ];
 
-    println!("{:<10} {:<15} {:<6} {:<6} {:<15} {:<10}",
-             "Position", "rsID", "REF", "ALT", "23andMe GT", "Final Dosage");
+    println!(
+        "{:<10} {:<15} {:<6} {:<6} {:<15} {:<10}",
+        "Position", "rsID", "REF", "ALT", "23andMe GT", "Final Dosage"
+    );
     println!("{:-<80}", "");
 
     for (vcf_pos, rsid, ref_a, alt_a, imputed_dosage) in vcf_records {

@@ -19,6 +19,9 @@ use uuid::Uuid;
 
 // Import from genetics-processor library
 use genetics_processor::genotype_converter::genotype_to_dosage;
+use genetics_processor::models::{
+    MultiSampleVariant, QualityThreshold as ModelQualityThreshold, SampleData,
+};
 use genetics_processor::output::{OutputFormat as ProcessorOutputFormat, OutputGenerator};
 use genetics_processor::parsers::{
     genome23andme::{Genome23Parser, Genome23Record},
@@ -26,7 +29,6 @@ use genetics_processor::parsers::{
     vcf::{VCFParser, VCFRecord},
 };
 use genetics_processor::processor::{DataSource, MergedVariant};
-use genetics_processor::models::{MultiSampleVariant, SampleData, QualityThreshold as ModelQualityThreshold};
 use genetics_processor::reference_panel::ReferencePanelReader;
 
 use crate::db;
@@ -73,13 +75,12 @@ impl JobProcessor {
         let mut tx = db::scoped_tx_for_user(&self.db_pool, &self.user_id)
             .await
             .context("Failed to open RLS-scoped transaction for job metadata")?;
-        let row: Option<(serde_json::Value,)> = sqlx::query_as(
-            "SELECT metadata FROM genetics_jobs WHERE id = $1"
-        )
-        .bind(self.job_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .context("Failed to query job metadata")?;
+        let row: Option<(serde_json::Value,)> =
+            sqlx::query_as("SELECT metadata FROM genetics_jobs WHERE id = $1")
+                .bind(self.job_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .context("Failed to query job metadata")?;
         tx.commit().await.context("Failed to commit")?;
 
         // Parse VCF format preference from metadata
@@ -89,95 +90,153 @@ impl JobProcessor {
                     "per_chromosome" => VcfFormat::PerChromosome,
                     "merged" | _ => VcfFormat::Merged, // Default to merged for unknown values
                 };
-                info!("Job {} VCF format preference from metadata: {:?}", self.job_id, format);
+                info!(
+                    "Job {} VCF format preference from metadata: {:?}",
+                    self.job_id, format
+                );
                 return Ok(format);
             }
         }
 
         // No metadata or no vcf_format field - default to Merged
-        info!("Job {} has no VCF format preference in metadata, defaulting to Merged", self.job_id);
+        info!(
+            "Job {} has no VCF format preference in metadata, defaulting to Merged",
+            self.job_id
+        );
         Ok(VcfFormat::Merged)
     }
 
     /// Main processing function
-    pub async fn process(&self, output_formats: &[OutputFormat], quality_threshold: QualityThreshold) -> Result<genetics_processor::output::VisualizationSummary> {
-        info!("Starting multi-sample genetics processing (51 samples) for job {} with quality threshold: {:?}",
-            self.job_id, quality_threshold);
+    pub async fn process(
+        &self,
+        output_formats: &[OutputFormat],
+        quality_threshold: QualityThreshold,
+    ) -> Result<genetics_processor::output::VisualizationSummary> {
+        info!(
+            "Starting multi-sample genetics processing (51 samples) for job {} with quality threshold: {:?}",
+            self.job_id, quality_threshold
+        );
 
         // Step 1: Verify reference panel database exists
-        self.publish_progress(5.0, "Verifying reference panel database (50 samples)").await?;
+        self.publish_progress(5.0, "Verifying reference panel database (50 samples)")
+            .await?;
         if !self.reference_panel_path.exists() {
-            return Err(anyhow::anyhow!("Reference panel database not found at {:?}", self.reference_panel_path));
+            return Err(anyhow::anyhow!(
+                "Reference panel database not found at {:?}",
+                self.reference_panel_path
+            ));
         }
-        info!("Reference panel database verified: {:?}", self.reference_panel_path);
-        self.publish_progress(8.0, "Reference panel ready (will load per-chromosome to manage memory)").await?;
+        info!(
+            "Reference panel database verified: {:?}",
+            self.reference_panel_path
+        );
+        self.publish_progress(
+            8.0,
+            "Reference panel ready (will load per-chromosome to manage memory)",
+        )
+        .await?;
 
         // Step 2: Find uploaded files
-        self.publish_progress(10.0, "Locating uploaded files").await?;
+        self.publish_progress(10.0, "Locating uploaded files")
+            .await?;
         let files = self.find_uploaded_files().await?;
         self.publish_progress(
             12.0,
-            &format!("Found {} VCF file(s), genome file, and {} PGS file",
+            &format!(
+                "Found {} VCF file(s), genome file, and {} PGS file",
                 files.vcf_files.len(),
                 if files.pgs_file.is_some() { "1" } else { "0" }
-            )
-        ).await?;
+            ),
+        )
+        .await?;
 
         // Step 3: Parse 23andMe genome file
-        self.publish_progress(20.0, "Parsing 23andMe genome data").await?;
+        self.publish_progress(20.0, "Parsing 23andMe genome data")
+            .await?;
         let genome_data = self.parse_genome_file(&files.genome_file).await?;
         info!("Parsed {} genome records", genome_data.len());
         self.publish_progress(
             25.0,
-            &format!("Loaded {} genotyped variants from 23andMe", genome_data.len())
-        ).await?;
+            &format!(
+                "Loaded {} genotyped variants from 23andMe",
+                genome_data.len()
+            ),
+        )
+        .await?;
 
         // Step 4: Parse VCF files
-        self.publish_progress(30.0, &format!("Parsing {} VCF file(s)...", files.vcf_files.len())).await?;
+        self.publish_progress(
+            30.0,
+            &format!("Parsing {} VCF file(s)...", files.vcf_files.len()),
+        )
+        .await?;
         let vcf_data = self.parse_vcf_files(&files.vcf_files).await?;
         info!("Parsed VCF data for {} chromosomes", vcf_data.len());
         let total_vcf_variants: usize = vcf_data.values().map(|v| v.len()).sum();
         self.publish_progress(
             40.0,
-            &format!("Loaded {} imputed variants across {} chromosomes",
-                total_vcf_variants, vcf_data.len())
-        ).await?;
+            &format!(
+                "Loaded {} imputed variants across {} chromosomes",
+                total_vcf_variants,
+                vcf_data.len()
+            ),
+        )
+        .await?;
 
         // Step 5: Parse PGS scores (optional)
-        self.publish_progress(45.0, "Parsing polygenic scores file").await?;
+        self.publish_progress(45.0, "Parsing polygenic scores file")
+            .await?;
         let pgs_data = self.parse_pgs_file(&files.pgs_file).await;
         if let Some(ref data) = pgs_data {
             info!("Parsed {} PGS records", data.unscaled.len());
-            let trait_count = data.unscaled.iter()
+            let trait_count = data
+                .unscaled
+                .iter()
                 .map(|r| r.label.clone())
                 .collect::<std::collections::HashSet<_>>()
                 .len();
             self.publish_progress(
                 50.0,
-                &format!("Loaded {} polygenic scores for {} traits",
-                    data.unscaled.len(), trait_count)
-            ).await?;
+                &format!(
+                    "Loaded {} polygenic scores for {} traits",
+                    data.unscaled.len(),
+                    trait_count
+                ),
+            )
+            .await?;
         } else {
             info!("No PGS data available, continuing without polygenic scores");
-            self.publish_progress(50.0, "No PGS data - continuing without polygenic scores").await?;
+            self.publish_progress(50.0, "No PGS data - continuing without polygenic scores")
+                .await?;
         }
 
         // Step 6 & 7: Merge and stream output chromosome-by-chromosome (memory-efficient)
-        self.publish_progress(55.0, "Starting streaming multi-sample processing (51 samples × 22 autosomes)").await?;
-        let (output_paths, viz_summary) = self.merge_and_stream_chromosomes(
-            &genome_data,
-            &vcf_data,
-            pgs_data.as_ref(),
-            quality_threshold,
-            output_formats
-        ).await?;
-        info!("Streaming processing complete: {} output files generated", output_paths.len());
+        self.publish_progress(
+            55.0,
+            "Starting streaming multi-sample processing (51 samples × 22 autosomes)",
+        )
+        .await?;
+        let (output_paths, viz_summary) = self
+            .merge_and_stream_chromosomes(
+                &genome_data,
+                &vcf_data,
+                pgs_data.as_ref(),
+                quality_threshold,
+                output_formats,
+            )
+            .await?;
+        info!(
+            "Streaming processing complete: {} output files generated",
+            output_paths.len()
+        );
 
         // Step 8: Record file metadata in database
-        self.publish_progress(95.0, "Recording output metadata").await?;
+        self.publish_progress(95.0, "Recording output metadata")
+            .await?;
         self.record_output_files(&output_paths).await?;
 
-        self.publish_progress(100.0, "Multi-sample processing complete (51 samples)").await?;
+        self.publish_progress(100.0, "Multi-sample processing complete (51 samples)")
+            .await?;
 
         Ok(viz_summary)
     }
@@ -216,7 +275,8 @@ impl JobProcessor {
     /// Parse 23andMe genome file
     async fn parse_genome_file(&self, path: &PathBuf) -> Result<Vec<Genome23Record>> {
         let parser = Genome23Parser::new();
-        let records = parser.parse(path)
+        let records = parser
+            .parse(path)
             .context("Failed to parse 23andMe genome file")?;
         Ok(records)
     }
@@ -227,17 +287,20 @@ impl JobProcessor {
         let total_files = paths.len();
 
         for (idx, path) in paths.iter().enumerate() {
-            let filename = path.file_name()
+            let filename = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
 
             self.publish_progress(
                 30.0 + ((idx + 1) as f32 / total_files as f32) * 10.0,
-                &format!("Parsing VCF file {}/{}: {}", idx + 1, total_files, filename)
-            ).await?;
+                &format!("Parsing VCF file {}/{}: {}", idx + 1, total_files, filename),
+            )
+            .await?;
 
             let mut parser = VCFParser::new();
-            let records = parser.parse(path)
+            let records = parser
+                .parse(path)
                 .context(format!("Failed to parse VCF file: {:?}", path))?;
 
             let record_count = records.len();
@@ -257,7 +320,10 @@ impl JobProcessor {
     }
 
     /// Parse PGS scores file
-    async fn parse_pgs_file(&self, path: &Option<PathBuf>) -> Option<genetics_processor::parsers::pgs::PgsDataset> {
+    async fn parse_pgs_file(
+        &self,
+        path: &Option<PathBuf>,
+    ) -> Option<genetics_processor::parsers::pgs::PgsDataset> {
         let path = match path {
             Some(p) => p,
             None => {
@@ -272,7 +338,10 @@ impl JobProcessor {
                 Some(dataset)
             }
             Err(e) => {
-                warn!("Failed to parse PGS scores file ({}), continuing without PGS data", e);
+                warn!(
+                    "Failed to parse PGS scores file ({}), continuing without PGS data",
+                    e
+                );
                 None
             }
         }
@@ -289,7 +358,10 @@ impl JobProcessor {
         pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
         quality_threshold: QualityThreshold,
         output_formats: &[OutputFormat],
-    ) -> Result<(HashMap<String, PathBuf>, genetics_processor::output::VisualizationSummary)> {
+    ) -> Result<(
+        HashMap<String, PathBuf>,
+        genetics_processor::output::VisualizationSummary,
+    )> {
         use genetics_processor::output::OutputGenerator;
 
         info!("════════════════════════════════════════════════════════════════");
@@ -310,14 +382,20 @@ impl JobProcessor {
 
         // Convert queue::OutputFormat to processor::OutputFormat
         use genetics_processor::output::OutputFormat as ProcessorOutputFormat;
-        let processor_formats: Vec<ProcessorOutputFormat> = output_formats.iter().map(|f| match f {
-            OutputFormat::Parquet => ProcessorOutputFormat::Parquet,
-            OutputFormat::Sqlite => ProcessorOutputFormat::Sqlite,
-            OutputFormat::Vcf => ProcessorOutputFormat::Vcf,
-        }).collect();
+        let processor_formats: Vec<ProcessorOutputFormat> = output_formats
+            .iter()
+            .map(|f| match f {
+                OutputFormat::Parquet => ProcessorOutputFormat::Parquet,
+                OutputFormat::Sqlite => ProcessorOutputFormat::Sqlite,
+                OutputFormat::Vcf => ProcessorOutputFormat::Vcf,
+            })
+            .collect();
 
         // Initialize streaming output BEFORE processing any chromosomes
-        info!("Initializing streaming output for {} format(s)...", processor_formats.len());
+        info!(
+            "Initializing streaming output for {} format(s)...",
+            processor_formats.len()
+        );
         let mut output_gen = OutputGenerator::new(
             self.job_id.to_string(),
             self.user_id.clone(),
@@ -327,9 +405,14 @@ impl JobProcessor {
         // Get VCF format preference from job metadata
         use genetics_processor::output::VcfFormat;
         let vcf_format = self.get_vcf_format_preference().await?;
-        info!("Using VCF format preference from job metadata: {:?}", vcf_format);
+        info!(
+            "Using VCF format preference from job metadata: {:?}",
+            vcf_format
+        );
 
-        output_gen.initialize_streaming_output(&processor_formats, vcf_format).await?;
+        output_gen
+            .initialize_streaming_output(&processor_formats, vcf_format)
+            .await?;
         info!("✓ Streaming output initialized (files created, headers written)");
 
         // Process each chromosome and stream output immediately
@@ -348,35 +431,51 @@ impl JobProcessor {
                     let variants = reference_panel.get_chromosome_variants(chr_num)?;
                     Ok(variants)
                 }
-            }).await??;
+            })
+            .await??;
 
             let ref_panel_size_mb = (ref_variants.len() * 50 * 50) / 1_048_576; // Conservative estimate
-            info!("  ✓ Loaded {} reference variants (~{} MB estimated)", ref_variants.len(), ref_panel_size_mb);
+            info!(
+                "  ✓ Loaded {} reference variants (~{} MB estimated)",
+                ref_variants.len(),
+                ref_panel_size_mb
+            );
 
             // Get user data for this chromosome
             info!("  [2/4] Extracting user data for chromosome {}...", chr);
             let chr_str = chr.to_string();
-            let chr_genome: Vec<_> = genome_data.iter()
+            let chr_genome: Vec<_> = genome_data
+                .iter()
                 .filter(|r| r.chromosome == chr_str)
                 .cloned()
                 .collect();
             let chr_vcf = vcf_data.get(&chr).map(|v| v.as_slice()).unwrap_or(&[]);
-            info!("  ✓ User data: {} genome records, {} VCF variants", chr_genome.len(), chr_vcf.len());
+            info!(
+                "  ✓ User data: {} genome records, {} VCF variants",
+                chr_genome.len(),
+                chr_vcf.len()
+            );
 
             // Merge this chromosome
-            info!("  [3/4] Merging chromosome {} (50 reference + 1 user = 51 samples)...", chr);
+            info!(
+                "  [3/4] Merging chromosome {} (50 reference + 1 user = 51 samples)...",
+                chr
+            );
             let merged = self.merge_single_chromosome_multi_sample(
                 chr,
                 &ref_variants,
                 &chr_genome,
                 chr_vcf,
-                model_threshold
+                model_threshold,
             )?;
 
             let variant_count = merged.len();
             total_variants += variant_count;
             let merged_size_mb = (variant_count * 51 * 80) / 1_048_576; // More conservative estimate (~80 bytes per sample)
-            info!("  ✓ Merged: {} variants × 51 samples (~{} MB)", variant_count, merged_size_mb);
+            info!(
+                "  ✓ Merged: {} variants × 51 samples (~{} MB)",
+                variant_count, merged_size_mb
+            );
 
             // Explicitly drop reference variants to free memory
             drop(ref_variants);
@@ -395,10 +494,17 @@ impl JobProcessor {
             let progress = 60.0 + (chr as f32 / 22.0) * 25.0; // 60-85% range
             self.publish_progress(
                 progress,
-                &format!("Processed and wrote chromosome {}/22 ({} total variants)", chr, total_variants)
-            ).await?;
+                &format!(
+                    "Processed and wrote chromosome {}/22 ({} total variants)",
+                    chr, total_variants
+                ),
+            )
+            .await?;
 
-            info!("✓ Chromosome {}/22 complete ({} accumulated variants)", chr, total_variants);
+            info!(
+                "✓ Chromosome {}/22 complete ({} accumulated variants)",
+                chr, total_variants
+            );
         }
 
         info!("════════════════════════════════════════════════════════════════");
@@ -408,7 +514,8 @@ impl JobProcessor {
         info!("════════════════════════════════════════════════════════════════");
 
         // Finalize streaming output (close files, write metadata, create indexes)
-        self.publish_progress(90.0, "Finalizing output files (metadata, indexes)...").await?;
+        self.publish_progress(90.0, "Finalizing output files (metadata, indexes)...")
+            .await?;
         info!("Finalizing streaming output (closing files, writing metadata, creating indexes)...");
         let (output_paths_map, viz_summary) = output_gen.finalize_streaming_output().await?;
         info!("✓ Output finalization complete!");
@@ -425,8 +532,10 @@ impl JobProcessor {
         for (format, path) in &output_paths {
             info!("  {} -> {:?}", format, path);
         }
-        info!("Visualization summary: {} variants across {} chromosomes",
-              viz_summary.total_variants, viz_summary.chromosomes_processed);
+        info!(
+            "Visualization summary: {} variants across {} chromosomes",
+            viz_summary.total_variants, viz_summary.chromosomes_processed
+        );
         info!("Memory efficient: Never held more than 1 chromosome in memory");
         info!("════════════════════════════════════════════════════════════════");
 
@@ -460,9 +569,14 @@ impl JobProcessor {
                     let variants = reference_panel.get_chromosome_variants(chr_num)?;
                     Ok(variants)
                 }
-            }).await??;
+            })
+            .await??;
 
-            info!("Loaded {} reference panel variants for chromosome {}", ref_variants.len(), chr);
+            info!(
+                "Loaded {} reference panel variants for chromosome {}",
+                ref_variants.len(),
+                chr
+            );
 
             // Filter genome data for this chromosome (23andMe uses String chromosomes)
             let chr_str = chr.to_string();
@@ -481,11 +595,14 @@ impl JobProcessor {
                 &ref_variants,
                 &chr_genome,
                 chr_vcf,
-                model_threshold
+                model_threshold,
             )?;
 
             let variant_count = merged.len();
-            info!("Merged chromosome {}: {} variants × 51 samples", chr, variant_count);
+            info!(
+                "Merged chromosome {}: {} variants × 51 samples",
+                chr, variant_count
+            );
 
             // Explicitly drop reference variants to free memory before next chromosome
             drop(ref_variants);
@@ -496,8 +613,9 @@ impl JobProcessor {
             let progress = 60.0 + (chr as f32 / 22.0) * 15.0; // 60-75% range
             self.publish_progress(
                 progress,
-                &format!("Merged chromosome {}/22 ({} variants)", chr, variant_count)
-            ).await?;
+                &format!("Merged chromosome {}/22 ({} variants)", chr, variant_count),
+            )
+            .await?;
         }
 
         Ok(merged_chromosomes)
@@ -531,13 +649,19 @@ impl JobProcessor {
             }
 
             // Merge chromosome data
-            let merged = self.merge_single_chromosome(chr, &chr_genome, chr_vcf.unwrap(), quality_threshold)?;
+            let merged = self.merge_single_chromosome(
+                chr,
+                &chr_genome,
+                chr_vcf.unwrap(),
+                quality_threshold,
+            )?;
 
             merged_chromosomes.insert(chr, merged);
 
             // Publish progress for each chromosome
             let progress = 60.0 + (chr as f32 / 22.0) * 15.0; // 60-75% range
-            self.publish_progress(progress, &format!("Merged chromosome {}/22", chr)).await?;
+            self.publish_progress(progress, &format!("Merged chromosome {}/22", chr))
+                .await?;
         }
 
         Ok(merged_chromosomes)
@@ -677,16 +801,24 @@ impl JobProcessor {
         quality_threshold: ModelQualityThreshold,
     ) -> Result<Vec<MultiSampleVariant>> {
         // Build lookups for user data by (position, ref_allele, alt_allele)
-        let mut user_genotyped_lookup: HashMap<(u64, String, String), &Genome23Record> = HashMap::new();
+        let mut user_genotyped_lookup: HashMap<(u64, String, String), &Genome23Record> =
+            HashMap::new();
         for record in genome_records {
-            let key = (record.position, record.genotype.chars().next().unwrap_or('-').to_string(),
-                       record.genotype.chars().nth(1).unwrap_or('-').to_string());
+            let key = (
+                record.position,
+                record.genotype.chars().next().unwrap_or('-').to_string(),
+                record.genotype.chars().nth(1).unwrap_or('-').to_string(),
+            );
             user_genotyped_lookup.insert(key, record);
         }
 
         let mut user_vcf_lookup: HashMap<(u64, String, String), &VCFRecord> = HashMap::new();
         for record in vcf_records {
-            let key = (record.position, record.ref_allele.clone(), record.alt_allele.clone());
+            let key = (
+                record.position,
+                record.ref_allele.clone(),
+                record.alt_allele.clone(),
+            );
             user_vcf_lookup.insert(key, record);
         }
 
@@ -710,7 +842,11 @@ impl JobProcessor {
             // Try genotyped data first, then VCF
             let user_sample = if let Some(genotyped) = user_genotyped_lookup.get(&key) {
                 // User has genotyped data for this variant
-                match genotype_to_dosage(&genotyped.genotype, &ref_variant.ref_allele, &ref_variant.alt_allele) {
+                match genotype_to_dosage(
+                    &genotyped.genotype,
+                    &ref_variant.ref_allele,
+                    &ref_variant.alt_allele,
+                ) {
                     Ok(Some(dosage)) => SampleData {
                         sample_id: "samp51".to_string(),
                         genotype: format_dosage_as_genotype(dosage),
@@ -777,14 +913,21 @@ impl JobProcessor {
                     sample_id: format!("samp{}", idx + 1),
                     genotype: genotype.clone(),
                     dosage: calculate_dosage_from_genotype(genotype),
-                    source: if ref_variant.is_typed { DataSource::Genotyped } else { DataSource::Imputed },
+                    source: if ref_variant.is_typed {
+                        DataSource::Genotyped
+                    } else {
+                        DataSource::Imputed
+                    },
                     imputation_quality: ref_variant.imputation_quality,
                 });
             }
             samples.push(user_sample);
 
             merged.push(MultiSampleVariant {
-                rsid: ref_variant.rsid.clone().unwrap_or_else(|| format!("{}:{}", chr, ref_variant.position)),
+                rsid: ref_variant
+                    .rsid
+                    .clone()
+                    .unwrap_or_else(|| format!("{}:{}", chr, ref_variant.position)),
                 chromosome: chr,
                 position: ref_variant.position,
                 ref_allele: ref_variant.ref_allele.clone(),
@@ -832,8 +975,14 @@ impl JobProcessor {
 
             self.publish_progress(
                 80.0 + ((idx as f32 / total_formats as f32) * 15.0),
-                &format!("Generating {} output ({}/{})", format_name, idx + 1, total_formats)
-            ).await?;
+                &format!(
+                    "Generating {} output ({}/{})",
+                    format_name,
+                    idx + 1,
+                    total_formats
+                ),
+            )
+            .await?;
 
             // Convert single format to ProcessorOutputFormat
             let processor_format = match format {
@@ -849,10 +998,7 @@ impl JobProcessor {
 
             // Add to results
             for (fmt, path) in output_paths {
-                let file_size = tokio::fs::metadata(&path)
-                    .await
-                    .ok()
-                    .map(|m| m.len());
+                let file_size = tokio::fs::metadata(&path).await.ok().map(|m| m.len());
 
                 if let Some(size) = file_size {
                     let size_mb = size as f64 / 1_048_576.0;
@@ -891,8 +1037,14 @@ impl JobProcessor {
 
             self.publish_progress(
                 80.0 + ((idx as f32 / total_formats as f32) * 15.0),
-                &format!("Generating {} output ({}/{})", format_name, idx + 1, total_formats)
-            ).await?;
+                &format!(
+                    "Generating {} output ({}/{})",
+                    format_name,
+                    idx + 1,
+                    total_formats
+                ),
+            )
+            .await?;
 
             // Convert single format to ProcessorOutputFormat
             let processor_format = match format {
@@ -908,14 +1060,14 @@ impl JobProcessor {
 
             // Add to results
             for (fmt, path) in output_paths {
-                let file_size = tokio::fs::metadata(&path)
-                    .await
-                    .ok()
-                    .map(|m| m.len());
+                let file_size = tokio::fs::metadata(&path).await.ok().map(|m| m.len());
 
                 if let Some(size) = file_size {
                     let size_mb = size as f64 / 1_048_576.0;
-                    info!("Generated {} output (51 samples): {:.2} MB", format_name, size_mb);
+                    info!(
+                        "Generated {} output (51 samples): {:.2} MB",
+                        format_name, size_mb
+                    );
                 }
 
                 result.insert(format!("{:?}", fmt), path);
@@ -936,7 +1088,8 @@ impl JobProcessor {
             .context("Failed to open RLS-scoped transaction for output file metadata")?;
 
         for (format, path) in output_paths {
-            let file_name = path.file_name()
+            let file_name = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
 
@@ -973,7 +1126,9 @@ impl JobProcessor {
             .context("Failed to record output file metadata")?;
         }
 
-        tx.commit().await.context("Failed to commit output file metadata")?;
+        tx.commit()
+            .await
+            .context("Failed to commit output file metadata")?;
 
         Ok(())
     }
@@ -989,7 +1144,9 @@ impl JobProcessor {
             "timestamp": Utc::now().to_rfc3339(),
         });
 
-        job_queue.publish_progress(self.job_id, &progress_msg.to_string()).await?;
+        job_queue
+            .publish_progress(self.job_id, &progress_msg.to_string())
+            .await?;
 
         Ok(())
     }
@@ -1001,11 +1158,11 @@ fn format_dosage_as_genotype(dosage: f64) -> String {
     let rounded = (dosage * 2.0).round() / 2.0;
 
     match rounded {
-        d if d <= 0.25 => "0|0".to_string(),      // Reference/Reference
-        d if d <= 0.75 => "0|1".to_string(),      // Reference/Alt (assume phased)
-        d if d <= 1.25 => "0|1".to_string(),      // Het (dosage ~1.0)
-        d if d <= 1.75 => "1|1".to_string(),      // Alt/Alt (dosage ~1.5-1.75)
-        _ => "1|1".to_string(),                   // Alt/Alt
+        d if d <= 0.25 => "0|0".to_string(), // Reference/Reference
+        d if d <= 0.75 => "0|1".to_string(), // Reference/Alt (assume phased)
+        d if d <= 1.25 => "0|1".to_string(), // Het (dosage ~1.0)
+        d if d <= 1.75 => "1|1".to_string(), // Alt/Alt (dosage ~1.5-1.75)
+        _ => "1|1".to_string(),              // Alt/Alt
     }
 }
 
@@ -1030,4 +1187,3 @@ struct UploadedFiles {
     vcf_files: Vec<PathBuf>,
     pgs_file: Option<PathBuf>,
 }
-

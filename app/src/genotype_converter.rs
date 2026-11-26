@@ -23,14 +23,18 @@ pub enum GenotypeConversionError {
     #[error("Invalid genotype format: '{0}' (expected 2 characters)")]
     InvalidFormat(String),
 
-    #[error("Genotype '{genotype}' does not match REF '{ref_allele}' or ALT '{alt_allele}' alleles")]
+    #[error(
+        "Genotype '{genotype}' does not match REF '{ref_allele}' or ALT '{alt_allele}' alleles"
+    )]
     AllelesMismatch {
         genotype: String,
         ref_allele: String,
         alt_allele: String,
     },
 
-    #[error("Multi-allelic site detected: genotype '{genotype}' with REF '{ref_allele}', ALT '{alt_allele}'")]
+    #[error(
+        "Multi-allelic site detected: genotype '{genotype}' with REF '{ref_allele}', ALT '{alt_allele}'"
+    )]
     MultiAllelicSite {
         genotype: String,
         ref_allele: String,

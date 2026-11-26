@@ -109,14 +109,14 @@ pub enum OutputFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum QualityThreshold {
-    None,       // No filtering - include all variants
-    R080,       // R² ≥ 0.8
-    R090,       // R² ≥ 0.9 (default, matches R script)
+    None, // No filtering - include all variants
+    R080, // R² ≥ 0.8
+    R090, // R² ≥ 0.9 (default, matches R script)
 }
 
 impl Default for QualityThreshold {
     fn default() -> Self {
-        QualityThreshold::R090  // Default to R² ≥ 0.9 to match R script behavior
+        QualityThreshold::R090 // Default to R² ≥ 0.9 to match R script behavior
     }
 }
 

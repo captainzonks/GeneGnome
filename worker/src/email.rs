@@ -12,9 +12,9 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use lettre::{
-    message::{header::ContentType, MultiPart, SinglePart},
-    transport::smtp::authentication::Credentials,
     Message, SmtpTransport, Transport,
+    message::{MultiPart, SinglePart, header::ContentType},
+    transport::smtp::authentication::Credentials,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -77,14 +77,12 @@ impl EmailConfig {
     /// Load email configuration from environment variables
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            smtp_host: std::env::var("SMTP_HOST")
-                .context("SMTP_HOST not set")?,
+            smtp_host: std::env::var("SMTP_HOST").context("SMTP_HOST not set")?,
             smtp_port: std::env::var("SMTP_PORT")
                 .context("SMTP_PORT not set")?
                 .parse()
                 .context("SMTP_PORT must be a valid port number")?,
-            smtp_username: std::env::var("SMTP_USERNAME")
-                .context("SMTP_USERNAME not set")?,
+            smtp_username: std::env::var("SMTP_USERNAME").context("SMTP_USERNAME not set")?,
             smtp_password: Self::read_smtp_password()?,
             smtp_use_tls: std::env::var("SMTP_USE_TLS")
                 .unwrap_or_else(|_| "false".to_string())
@@ -94,10 +92,8 @@ impl EmailConfig {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            from_email: std::env::var("SMTP_FROM_EMAIL")
-                .context("SMTP_FROM_EMAIL not set")?,
-            from_name: std::env::var("SMTP_FROM_NAME")
-                .context("SMTP_FROM_NAME not set")?,
+            from_email: std::env::var("SMTP_FROM_EMAIL").context("SMTP_FROM_EMAIL not set")?,
+            from_name: std::env::var("SMTP_FROM_NAME").context("SMTP_FROM_NAME not set")?,
             download_base_url: std::env::var("GENETICS_DOWNLOAD_BASE_URL")
                 .context("GENETICS_DOWNLOAD_BASE_URL not set")?,
             template_dir: std::env::var("GENETICS_EMAIL_TEMPLATE_DIR")
@@ -107,8 +103,8 @@ impl EmailConfig {
 
     /// Read SMTP password from secret file
     fn read_smtp_password() -> Result<String> {
-        let password_file = std::env::var("SMTP_PASSWORD_FILE")
-            .context("SMTP_PASSWORD_FILE not set")?;
+        let password_file =
+            std::env::var("SMTP_PASSWORD_FILE").context("SMTP_PASSWORD_FILE not set")?;
 
         fs::read_to_string(&password_file)
             .with_context(|| format!("Failed to read SMTP password from {}", password_file))
@@ -157,13 +153,19 @@ impl EmailSender {
         variables.insert("job_id".to_string(), job_id.to_string());
         variables.insert("completed_at".to_string(), format_datetime(completed_at));
         variables.insert("expires_at".to_string(), format_datetime(expires_at));
-        variables.insert("download_password".to_string(), download_password.to_string());
+        variables.insert(
+            "download_password".to_string(),
+            download_password.to_string(),
+        );
         variables.insert(
             "download_url".to_string(),
             format!("{}?token={}", self.config.download_base_url, download_token),
         );
         // Derive visualize URL from download URL (replace /download with /visualize)
-        let visualize_base = self.config.download_base_url.replace("/download", "/visualize");
+        let visualize_base = self
+            .config
+            .download_base_url
+            .replace("/download", "/visualize");
         variables.insert(
             "visualize_url".to_string(),
             format!("{}?token={}", visualize_base, download_token),
@@ -173,11 +175,13 @@ impl EmailSender {
         let html_template_path = Path::new(&self.config.template_dir).join("download_ready.html");
         let text_template_path = Path::new(&self.config.template_dir).join("download_ready.txt");
 
-        let html_template = fs::read_to_string(&html_template_path)
-            .with_context(|| format!("Failed to read HTML template from {:?}", html_template_path))?;
+        let html_template = fs::read_to_string(&html_template_path).with_context(|| {
+            format!("Failed to read HTML template from {:?}", html_template_path)
+        })?;
 
-        let text_template = fs::read_to_string(&text_template_path)
-            .with_context(|| format!("Failed to read text template from {:?}", text_template_path))?;
+        let text_template = fs::read_to_string(&text_template_path).with_context(|| {
+            format!("Failed to read text template from {:?}", text_template_path)
+        })?;
 
         let html_body = render_template(&html_template, &variables);
         let text_body = render_template(&text_template, &variables);
@@ -231,11 +235,17 @@ impl EmailSender {
 
         match mailer.send(&email) {
             Ok(_) => {
-                info!("Email sent successfully to {} for job {}", user_email, job_id);
+                info!(
+                    "Email sent successfully to {} for job {}",
+                    user_email, job_id
+                );
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to send email to {} for job {}: {}", user_email, job_id, e);
+                error!(
+                    "Failed to send email to {} for job {}: {}",
+                    user_email, job_id, e
+                );
                 Err(anyhow::anyhow!("SMTP send failed: {}", e))
             }
         }

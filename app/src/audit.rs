@@ -90,11 +90,9 @@ impl AuditEvent {
             | AuditEventType::AccessDenied
             | AuditEventType::MalwareDetected => LogSeverity::Warning,
 
-            AuditEventType::JobFailed
-            | AuditEventType::InvalidInput => LogSeverity::Error,
+            AuditEventType::JobFailed | AuditEventType::InvalidInput => LogSeverity::Error,
 
-            AuditEventType::UnusualActivity
-            | AuditEventType::FileRejected => LogSeverity::Critical,
+            AuditEventType::UnusualActivity | AuditEventType::FileRejected => LogSeverity::Critical,
 
             _ => LogSeverity::Info,
         };
@@ -155,12 +153,7 @@ pub async fn log_event(
     resource: Option<String>,
     details: serde_json::Value,
 ) -> Result<(), sqlx::Error> {
-    let event = AuditEvent::new(
-        event_type,
-        Some(user_id.to_string()),
-        resource,
-        details,
-    );
+    let event = AuditEvent::new(event_type, Some(user_id.to_string()), resource, details);
 
     event.log(pool).await
 }

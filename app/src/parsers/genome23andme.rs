@@ -138,7 +138,11 @@ impl Genome23Parser {
     }
 
     /// Parse a single line from the 23andMe file
-    fn parse_line(&self, line: &str, line_number: usize) -> Result<Genome23Record, Genome23ParseError> {
+    fn parse_line(
+        &self,
+        line: &str,
+        line_number: usize,
+    ) -> Result<Genome23Record, Genome23ParseError> {
         let fields: Vec<&str> = line.split('\t').collect();
 
         if fields.len() != 4 {
@@ -154,12 +158,13 @@ impl Genome23Parser {
         let genotype = fields[3].trim().to_string();
 
         // Parse position
-        let position = position_str.parse::<u64>().map_err(|_| {
-            Genome23ParseError::InvalidPosition {
-                line: line_number,
-                value: position_str.to_string(),
-            }
-        })?;
+        let position =
+            position_str
+                .parse::<u64>()
+                .map_err(|_| Genome23ParseError::InvalidPosition {
+                    line: line_number,
+                    value: position_str.to_string(),
+                })?;
 
         Ok(Genome23Record {
             rsid,

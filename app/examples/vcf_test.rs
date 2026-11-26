@@ -33,8 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create parser with quality filter
     let mut parser = VCFParser::new()
-        .with_min_quality(0.3)   // Filter SNPs with DR2 < 0.3
-        .with_max_errors(100);   // Fail if >100 bad records
+        .with_min_quality(0.3) // Filter SNPs with DR2 < 0.3
+        .with_max_errors(100); // Fail if >100 bad records
 
     println!("Parser configuration:");
     println!("  - Minimum quality (DR2): {}", parser.min_quality);
@@ -60,23 +60,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  - Records skipped (quality): {}", parser.skipped_count);
             println!("  - Errors encountered: {}", parser.error_count);
             println!("  - Parse time: {:.2}s", elapsed.as_secs_f64());
-            println!("  - Records/sec: {:.0}", records.len() as f64 / elapsed.as_secs_f64());
+            println!(
+                "  - Records/sec: {:.0}",
+                records.len() as f64 / elapsed.as_secs_f64()
+            );
             println!();
 
             // Show first 10 records as sample
             if !records.is_empty() {
                 println!("Sample records (first 10):");
                 println!("{}", "-".repeat(80));
-                println!("{:<15} {:<6} {:<12} {:<4} {:<4} {:<8} {:<6}",
-                    "rsID", "Chr", "Position", "REF", "ALT", "Dosage", "DR2");
+                println!(
+                    "{:<15} {:<6} {:<12} {:<4} {:<4} {:<8} {:<6}",
+                    "rsID", "Chr", "Position", "REF", "ALT", "Dosage", "DR2"
+                );
                 println!("{}", "-".repeat(80));
 
                 for (i, record) in records.iter().take(10).enumerate() {
-                    let dr2_str = record.imputation_quality
+                    let dr2_str = record
+                        .imputation_quality
                         .map(|q| format!("{:.4}", q))
                         .unwrap_or_else(|| "N/A".to_string());
 
-                    println!("{:<15} {:<6} {:<12} {:<4} {:<4} {:<8.4} {:<6}",
+                    println!(
+                        "{:<15} {:<6} {:<12} {:<4} {:<4} {:<8.4} {:<6}",
                         if record.rsid.len() > 14 {
                             format!("{}...", &record.rsid[..11])
                         } else {
@@ -98,13 +105,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // Quality distribution (if available)
-            let with_quality: Vec<_> = records.iter()
+            let with_quality: Vec<_> = records
+                .iter()
                 .filter_map(|r| r.imputation_quality)
                 .collect();
 
             if !with_quality.is_empty() {
                 let min_q = with_quality.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-                let max_q = with_quality.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+                let max_q = with_quality
+                    .iter()
+                    .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
                 let mean_q = with_quality.iter().sum::<f64>() / with_quality.len() as f64;
 
                 println!();
@@ -112,7 +122,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  - Min: {:.4}", min_q);
                 println!("  - Max: {:.4}", max_q);
                 println!("  - Mean: {:.4}", mean_q);
-                println!("  - SNPs with DR2: {} / {} ({:.1}%)",
+                println!(
+                    "  - SNPs with DR2: {} / {} ({:.1}%)",
                     with_quality.len(),
                     records.len(),
                     100.0 * with_quality.len() as f64 / records.len() as f64

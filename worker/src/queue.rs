@@ -9,8 +9,8 @@
 // ==============================================================================
 
 use anyhow::{Context, Result};
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -30,9 +30,9 @@ pub enum OutputFormat {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum QualityThreshold {
-    None,       // No filtering - include all variants
-    R080,       // R² ≥ 0.8
-    R090,       // R² ≥ 0.9 (default, matches R script)
+    None, // No filtering - include all variants
+    R080, // R² ≥ 0.8
+    R090, // R² ≥ 0.9 (default, matches R script)
 }
 
 impl QualityThreshold {
@@ -57,7 +57,7 @@ impl QualityThreshold {
 
 impl Default for QualityThreshold {
     fn default() -> Self {
-        QualityThreshold::R090  // Default to R² ≥ 0.9 to match R script behavior
+        QualityThreshold::R090 // Default to R² ≥ 0.9 to match R script behavior
     }
 }
 
@@ -66,7 +66,7 @@ impl Default for QualityThreshold {
 pub struct JobPayload {
     pub job_id: Uuid,
     pub user_id: String,
-    pub user_email: Option<String>,  // Phase 4: Email for download notifications
+    pub user_email: Option<String>, // Phase 4: Email for download notifications
     pub upload_dir: String,
     pub output_dir: String,
     pub output_formats: Vec<OutputFormat>,
@@ -100,7 +100,8 @@ impl JobQueue {
     /// Dequeue a job (blocking pop with timeout)
     pub async fn dequeue(&mut self) -> Result<Option<JobPayload>> {
         // BRPOP with 1 second timeout
-        let result: Option<(String, String)> = self.conn
+        let result: Option<(String, String)> = self
+            .conn
             .brpop(QUEUE_KEY, 1.0)
             .await
             .context("Failed to pop from queue")?;
@@ -118,7 +119,8 @@ impl JobQueue {
     /// Publish progress update to pub/sub channel
     pub async fn publish_progress(&mut self, job_id: Uuid, message: &str) -> Result<()> {
         let channel = format!("genetics:progress:{}", job_id);
-        self.conn.publish::<_, _, ()>(channel, message)
+        self.conn
+            .publish::<_, _, ()>(channel, message)
             .await
             .context("Failed to publish progress update")?;
 

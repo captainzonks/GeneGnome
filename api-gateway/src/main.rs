@@ -10,11 +10,11 @@
 
 use anyhow::{Context, Result};
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
-    http::{header, Method, StatusCode},
+    http::{Method, StatusCode, header},
     response::IntoResponse,
     routing::{delete, get, post},
-    Router,
 };
 use std::net::SocketAddr;
 use tower::ServiceBuilder;
@@ -22,7 +22,7 @@ use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 mod db;
 mod email;
@@ -40,7 +40,7 @@ use state::AppState;
 #[tokio::main]
 async fn main() -> Result<()> {
     let server_port = 8099;
-    
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -48,7 +48,10 @@ async fn main() -> Result<()> {
         .compact()
         .init();
 
-    info!("Starting Genetics API Gateway v{}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Starting Genetics API Gateway v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Load environment variables
     dotenvy::dotenv().ok();
@@ -70,9 +73,7 @@ async fn main() -> Result<()> {
         .context("Failed to bind to address")?;
 
     // Run server
-    axum::serve(listener, app)
-        .await
-        .context("Server error")?;
+    axum::serve(listener, app).await.context("Server error")?;
 
     Ok(())
 }
@@ -93,11 +94,20 @@ fn build_router(state: AppState) -> Router {
         // Visualization data (same auth as download, non-destructive)
         .route("/visualization", get(handlers::get_visualization))
         // Visualization data via job ID + password (direct access)
-        .route("/jobs/{job_id}/visualization", get(handlers::get_visualization_by_job))
+        .route(
+            "/jobs/{job_id}/visualization",
+            get(handlers::get_visualization_by_job),
+        )
         // Job management (public status, resend email, self-service deletion)
-        .route("/jobs/{job_id}/status", get(handlers::get_job_public_status))
+        .route(
+            "/jobs/{job_id}/status",
+            get(handlers::get_job_public_status),
+        )
         .route("/jobs/{job_id}/resend-email", post(handlers::resend_email))
-        .route("/jobs/{job_id}/delete", post(handlers::delete_job_with_recovery))
+        .route(
+            "/jobs/{job_id}/delete",
+            post(handlers::delete_job_with_recovery),
+        )
         // Chunked upload endpoints (for files >50MB, Cloudflare bypass)
         .route("/upload/chunks", post(handlers::upload_chunk))
         .route("/upload/finalize", post(handlers::finalize_upload))
@@ -123,10 +133,7 @@ fn build_router(state: AppState) -> Router {
         // Allow standard methods
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         // Allow standard headers (no authentication headers needed)
-        .allow_headers([
-            header::CONTENT_TYPE,
-            header::ACCEPT,
-        ])
+        .allow_headers([header::CONTENT_TYPE, header::ACCEPT])
         // Expose headers for client access
         .expose_headers([header::CONTENT_TYPE]);
 

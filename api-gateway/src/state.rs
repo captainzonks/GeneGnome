@@ -10,8 +10,8 @@
 
 use anyhow::{Context, Result};
 use redis::Client as RedisClient;
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -45,8 +45,7 @@ impl AppState {
     /// Create new application state from environment
     pub async fn new() -> Result<Self> {
         // Get database URL from environment
-        let database_url = std::env::var("DATABASE_URL")
-            .context("DATABASE_URL must be set")?;
+        let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
 
         // Create PostgreSQL pool
         let db_pool = PgPoolOptions::new()
@@ -56,15 +55,15 @@ impl AppState {
             .context("Failed to connect to PostgreSQL")?;
 
         // Get Redis URL from environment
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
         // Create Redis client
-        let redis_client = RedisClient::open(redis_url)
-            .context("Failed to create Redis client")?;
+        let redis_client = RedisClient::open(redis_url).context("Failed to create Redis client")?;
 
         // Test Redis connection
-        let mut conn = redis_client.get_connection()
+        let mut conn = redis_client
+            .get_connection()
             .context("Failed to connect to Redis")?;
         redis::cmd("PING")
             .query::<String>(&mut conn)
@@ -73,7 +72,7 @@ impl AppState {
         // Get encrypted volume path from environment
         let encrypted_volume_path = PathBuf::from(
             std::env::var("ENCRYPTED_VOLUME_PATH")
-                .unwrap_or_else(|_| "/mnt/genetics-encrypted".to_string())
+                .unwrap_or_else(|_| "/mnt/genetics-encrypted".to_string()),
         );
 
         // Setup directories within encrypted volume
@@ -140,9 +139,13 @@ impl AppState {
         use std::sync::OnceLock;
         static MOCK_STATE: OnceLock<AppState> = OnceLock::new();
 
-        MOCK_STATE.get_or_init(|| {
-            // TODO: This is a placeholder - in real tests you'd use test containers
-            panic!("Mock state not yet implemented - use integration tests with test containers");
-        }).clone()
+        MOCK_STATE
+            .get_or_init(|| {
+                // TODO: This is a placeholder - in real tests you'd use test containers
+                panic!(
+                    "Mock state not yet implemented - use integration tests with test containers"
+                );
+            })
+            .clone()
     }
 }
