@@ -8,7 +8,7 @@ Description: What is wrong or missing in GeneGnome today, in priority order
 Author: Matt Barham
 Created: 2026-11-26
 Modified: 2026-11-26
-Version: 1.2.0
+Version: 1.3.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -38,7 +38,6 @@ Items are in priority order. Released changes are listed in
 
 ## 3. Demonstrability
 
-- [ ] Screenshots of the upload, progress and visualization pages
 - [ ] A committed benchmark that reproduces the performance figures
 
 ## 4. Input validation
@@ -58,7 +57,7 @@ implemented.
 
 ## 6. Smaller defects
 
-- [ ] Job status endpoint reports completed jobs as queued
+- [ ] The web form offers no SQLite output, which the API supports
 - [ ] Genotyped and imputed variant counts reflect the reference panel's
       `TYPED` flag, not where the user's calls came from
 - [ ] Processing progress is reported as a fixed 50% by the status endpoint

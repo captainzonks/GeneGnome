@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-11-26
-Version: 1.6.0
+Version: 1.7.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -220,6 +220,14 @@ is server-side and does involve upload.
 ---
 
 ## Demo
+
+![Visualization dashboard showing variant counts and a per-chromosome chart for synthetic data](docs/screenshots/dashboard.png)
+
+![Upload page listing the synthetic input files, each marked valid](docs/screenshots/upload.png)
+
+![Completion page reporting the processing time, retention period and number of output formats](docs/screenshots/complete.png)
+
+Screenshots show the demo's synthetic data.
 
 Try the whole pipeline on synthetic data. Only Docker with Compose v2 is needed.
 
@@ -520,7 +528,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 84 tests: app 51, api-gateway 21, worker 12
+# Test — 86 tests: app 51, api-gateway 23, worker 12
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test
