@@ -1,0 +1,30 @@
+# ==============================================================================
+# deny.toml - cargo-deny policy for GeneGnome
+# ==============================================================================
+# Description: Dependency policy checked in CI for each crate: RustSec
+#              advisories and allowed sources (crates.io only).
+# Author: Matt Barham
+# Created: 2026-11-25
+# Modified: 2026-11-25
+# Version: 1.0.0
+# ==============================================================================
+# Documentation:
+#   - https://embarkstudios.github.io/cargo-deny/checks/cfg.html
+# ==============================================================================
+
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "chrono: unmaintained notice, no patched release; replacing it is separate work" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

@@ -23,7 +23,7 @@ Status: Active
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](docker-compose.yml)
-[![Rust](https://img.shields.io/badge/Rust-1.98+-orange?logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.100+-orange?logo=rust)](https://www.rust-lang.org/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21U3S1R)
 
@@ -195,7 +195,7 @@ Three independent crates, no Cargo workspace — each carries its own
 | `genetics-api-gateway` | `api-gateway/` | Axum REST API |
 | `genetics-worker` | `worker/` | Background job processor |
 
-Rust 1.98+, edition 2024.
+Rust 1.100+, edition 2024.
 
 ### Client-side VCF generation
 
@@ -467,7 +467,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 64 tests: app 41, api-gateway 15, worker 8
+# Test — 67 tests: app 42, api-gateway 16, worker 9
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test
