@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-11-26
-Version: 1.3.4
+Version: 1.4.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -44,15 +44,18 @@ control.
 - Generates the multi-sample VCF that Michigan requires, in the browser via
   WebAssembly — that step involves no upload
 - Writes Parquet, VCF, and SQLite for downstream analysis
+- Includes a precomputed polygenic score table in the results if you upload
+  one; it does not calculate scores
 - Stores all genetic data on a LUKS AES-256-XTS volume and deletes it after
   24 hours
 - Delivers results through a rate-limited, token-gated download endpoint
 
-A full 6M-variant, 51-sample merge takes roughly two minutes on a 6-core
-desktop. See [Performance](#performance) for what was measured and how.
+One measured run of a 6M-variant, 51-sample merge took roughly two minutes on a
+6-core desktop. See [Performance](#performance) for what was measured and how.
 
 **Scope:** autosomes 1–22, GRCh37/hg19, fixed 51-sample merge model. See
-[Limitations](#limitations) before deploying.
+[Limitations](#limitations) before deploying. Known defects and planned work
+are in [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -61,11 +64,10 @@ desktop. See [Performance](#performance) for what was measured and how.
 ### Security
 
 - **Encrypted storage** — LUKS AES-256-XTS volume for all genetic data
-- **Network isolation** — the job queue and database sit only on Docker
-  networks declared `internal: true`. The worker shares those networks and
-  also joins the reverse-proxy network, solely to send the download-link
-  email over SMTP: it has no HTTP client, publishes no ports, and has no
-  proxy route
+- **Network segmentation** — Redis is attached only to a Docker network
+  declared `internal: true`. The database and worker use internal networks to
+  talk to each other, but both also join the reverse-proxy network (the worker
+  to send email over SMTP), so neither is cut off from outside networks
 - **No third-party network calls from the frontend** — every script the
   frontend loads (JSZip, Chart.js, chartjs-plugin-annotation, MathJax, and
   its CHTML fonts) is vendored under `frontend/www/vendor/` rather than
@@ -76,10 +78,12 @@ desktop. See [Performance](#performance) for what was measured and how.
   disabled in config) would call out to `cdn.jsdelivr.net` for
   `speech-rule-engine` data if re-enabled — vendoring that dependency chain
   was out of scope.
-- **Automatic deletion** — results removed 24 hours after completion by an
-  hourly cleanup loop
-- **Secure file wiping** — input files overwritten with the DoD 5220.22-M
-  7-pass pattern, not unlinked
+- **Secure wiping** — the worker overwrites a job's uploaded inputs in seven
+  passes as soon as the job ends, whether it succeeded or failed. Overwriting
+  cannot guarantee erasure on SSDs or copy-on-write filesystems, so the
+  encrypted volume remains the primary protection
+- **Automatic deletion** — an hourly cleanup loop overwrites and removes the
+  remaining files and job records 24 hours after a job completes or fails
 - **Row-level security** — `api-gateway` and `worker` connect as
   `genetics_app`, a role that is neither superuser nor schema owner, so the
   isolation policies actually evaluate. This was not true before
@@ -87,29 +91,29 @@ desktop. See [Performance](#performance) for what was measured and how.
   why writing correct policy SQL was not sufficient, and
   `api-gateway/tests/rls_enforcement.rs` is the integration test that proves
   the current behaviour against a live connection.
-- **Download gating** — single-use token plus password, maximum five attempts,
-  token expires with the job
+- **Download gating** — random token plus password, at most five successful
+  downloads per issued password, expiring with the job
+- **Guess limits** — ten wrong download passwords or recovery codes per job per
+  hour, then requests are refused
 - **Recovery codes** — eight Argon2id-hashed single-use codes per job, for
   deletion without email access
 - **Container hardening** — non-root (UID 3000), `cap_drop: ALL`, per-service
   memory and CPU limits
-- **Audit logging** — data access and processing events written to an
-  append-only table
+- **Access records** — download attempts are recorded in the database, and
+  removal of those records is written to the audit table. The services do not
+  yet log processing events to the audit table
 
 Full policy in [PRIVACY.md](PRIVACY.md).
 
 ### Processing
 
-- **Streaming output on the worker path** — Parquet written in 10,000-row
-  batches per chromosome (`app/src/output.rs`, invoked from
-  `worker/src/job_processor.rs` via `initialize_streaming_output`/
-  `finalize_streaming_output`), so peak memory does not scale with dataset
-  size. The in-process library path (`app/src/processor.rs`) accumulates
-  merged chromosomes in memory instead; use the worker for full-size
-  datasets.
-- **Strand-flip handling** — reverse-complement fallback on allele mismatch,
-  with unit tests (`app/src/genotype_converter.rs`)
-- **Quality filtering** — configurable DR2 threshold during VCF parsing
+- **Per-chromosome output** — the worker merges and writes one chromosome at a
+  time (Parquet in 10,000-row batches, `app/src/output.rs`). Parsed input files
+  are still held in memory for the whole job
+- **Quality filtering** — optional R² threshold (none, 0.8, 0.9), applied to
+  each variant's imputation quality in the reference panel
+- **Polygenic score pass-through** — an uploaded score table is written to
+  `pgs_scores.csv` and, with SQLite output, to the score tables
 - **Concurrent jobs** — each dequeued job is spawned as its own Tokio task.
   There is no concurrency cap; bound it with container resource limits.
 
@@ -152,9 +156,6 @@ Full policy in [PRIVACY.md](PRIVACY.md).
    │  + WASM  │      │             │      │            │
    └──────────┘      └──────┬──────┘      └────────────┘
                              │
-══════════════════════════════════════════════════════════════════
-   internal: true — no route to any external network below here
-══════════════════════════════════════════════════════════════════
                              │
                     ┌────────▼────────┐
                     │   Job Queue     │
@@ -174,6 +175,9 @@ Full policy in [PRIVACY.md](PRIVACY.md).
    └──────────┘      │   (LUKS)    │      └────────────┘
                      └─────────────┘
 ```
+
+The diagram shows data flow. See [Security](#security) for which services share
+which Docker networks.
 
 ### Components
 
@@ -320,17 +324,18 @@ size limits and retention, per-container memory and CPU limits.
 
 1. **Generate VCF** (optional) — convert a 23andMe export to a multi-sample
    VCF for imputation, in-browser
-2. **Upload and process** — submit the 23andMe file and the imputed VCF
-   results
+2. **Upload and process** — submit the 23andMe file, the imputed VCF results
+   and, optionally, a score table (`scores.txt`, `*scores*.csv` or `*.pgs`)
 3. **Save recovery codes** — eight single-use codes, shown once at submission
 4. **Receive email** — download link and password on completion
-5. **Download** — a ZIP containing Parquet, VCF, and SQLite outputs
+5. **Download** — a ZIP containing the formats you selected (Parquet, VCF,
+   SQLite), plus `pgs_scores.csv` if you uploaded scores
 6. **Explore** — visualization dashboard for the processed job
 7. **Manage** — look up jobs, resend email, or delete data
 
 **On the download ZIP:** the archive is written with
 `CompressionMethod::Stored` and is not itself encrypted. The password gates
-the download endpoint (single-use token, five-attempt limit); protection at
+the download endpoint (token plus password, five-download limit); protection at
 rest is the LUKS volume. Treat the downloaded file as plaintext once it
 reaches your machine.
 
@@ -338,8 +343,8 @@ reaches your machine.
 
 ```
 POST   /api/genetics/jobs                        — submit job (multipart)
-GET    /api/genetics/jobs/{job_id}               — job status (authenticated)
-DELETE /api/genetics/jobs/{job_id}               — delete job
+GET    /api/genetics/jobs/{job_id}               — job status
+DELETE /api/genetics/jobs/{job_id}               — delete an uncompleted job
 GET    /api/genetics/jobs/{job_id}/ws            — WebSocket progress stream
 GET    /api/genetics/jobs/{job_id}/status        — public status lookup
 POST   /api/genetics/jobs/{job_id}/resend-email  — resend download email
@@ -352,6 +357,11 @@ POST   /api/genetics/upload/finalize             — finalize chunked upload
 GET    /api/genetics/health                      — health check
 GET    /api/genetics/ready                       — readiness check
 ```
+
+There are no user accounts. The job ID grants access to status, progress and
+deletion of jobs that have not completed, so treat it as private. Downloading
+results needs the token and password; deleting a completed job needs a recovery
+code.
 
 ---
 
@@ -375,7 +385,8 @@ committed benchmark harness in this repository — no `benches/`, no criterion �
 and the R script and comparison tooling live under the gitignored
 `genome-data/` directory, so the run above cannot be reproduced from a clone.
 Read the numbers as an order-of-magnitude result for this workload rather than
-a general speedup factor, and do not extrapolate them to smaller inputs.
+a general speedup factor, and do not extrapolate them to smaller inputs. The
+code has changed substantially since that run, and it has not been repeated.
 
 Output sizes from the same run:
 
@@ -414,22 +425,29 @@ point-in-time record of that investigation, not as current output.
 
 ## Limitations
 
-- **Autosomes only.** Chromosomes 1–22. X, Y, and mitochondrial variants are
-  dropped at parse time.
+- **Autosomes only.** Only chromosomes 1–22 are merged. X, Y and
+  mitochondrial variants are not processed.
 - **GRCh37/hg19 only.** No liftover. Inputs on another build will merge
   incorrectly rather than fail loudly.
+- **Genotyped calls are matched too narrowly.** The merge recognizes a
+  23andMe genotype only when its two alleles read as reference then alternate.
+  Other genotyped sites fall back to the imputed value.
+- **Missing user data is written as homozygous reference.** A panel variant
+  absent from both user inputs appears as `0|0`, not as missing.
+- **No strand-flip handling in the merge.** The library has a reverse-complement
+  helper, but the worker does not use it.
 - **Fixed merge model.** 50 reference samples plus one user sample. The panel
   is not swappable without code changes.
 - **Reference preparation needs R.** `scripts/convert_reference_to_db.R` is
   the only supported path to `reference_panel.db`.
-- **Linux and root required** for the LUKS volume. There is no unencrypted
-  deployment mode.
+- **Linux and root required** for the LUKS volume setup. The worker checks
+  that the data directory exists, not that it is encrypted.
 - **24-hour retention is not configurable per user.** Everything is deleted by
   the hourly sweep.
-- **The library path is not streaming.** `app/src/processor.rs` holds merged
-  chromosomes in memory; only the worker streams.
-- **Single-node deployment.** No CI/CD to production and no horizontal
-  scaling. See the ADR discussion in
+- **Two processing paths.** `app/src/processor.rs` is an older in-library
+  pipeline whose output step is incomplete; the worker is the supported path.
+- **Single-node deployment.** CI builds and tests, but nothing deploys
+  automatically, and there is no horizontal scaling. See the ADR discussion in
   [Spoke](https://github.com/captainzonks/spoke) for the reasoning.
 
 ---
@@ -438,12 +456,12 @@ point-in-time record of that investigation, not as current output.
 
 | Document | Description |
 |----------|-------------|
+| [ROADMAP.md](ROADMAP.md) | Known defects and planned work |
 | [PRIVACY.md](PRIVACY.md) | Privacy policy and data handling |
 | [.env.example](.env.example) | Configuration reference |
 | [docs/adr/0001-rls-role-separation.md](docs/adr/0001-rls-role-separation.md) | Why RLS needed role separation, and what changed |
 | [docs/REFERENCE_DATA.md](docs/REFERENCE_DATA.md) | Reference panel provenance and preparation |
 | [docs/parquet_usage_guide.md](docs/parquet_usage_guide.md) | Working with Parquet output |
-| [docs/PGS_CALCULATION_REFERENCE.md](docs/PGS_CALCULATION_REFERENCE.md) | Polygenic score calculation |
 | [docs/platform_architecture.md](docs/platform_architecture.md) | Platform architecture detail |
 | [docs/email_credential_security_design.md](docs/email_credential_security_design.md) | Email credential handling |
 | [app/docs/vcf_parser_benchmark.md](app/docs/vcf_parser_benchmark.md) | Parser selection and timings |
@@ -458,7 +476,10 @@ Point-in-time records, kept for history and not maintained:
 [docs/r_processing_pipeline_specification.md](docs/r_processing_pipeline_specification.md),
 [docs/r_script_output_analysis.md](docs/r_script_output_analysis.md),
 [docs/rust_implementation_strategy.md](docs/rust_implementation_strategy.md),
-[docs/noodles_vcf_research.md](docs/noodles_vcf_research.md).
+[docs/noodles_vcf_research.md](docs/noodles_vcf_research.md),
+[docs/PGS_CALCULATION_REFERENCE.md](docs/PGS_CALCULATION_REFERENCE.md)
+(background notes on interpreting scores),
+[docs/STATUS.md](docs/STATUS.md).
 
 ---
 
