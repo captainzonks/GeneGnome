@@ -4,13 +4,11 @@
 // Description: Demonstrates converting 23andMe genotypes to VCF dosages
 // Author: Matthew Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 2.0.0
 // ==============================================================================
 
-use genetics_processor::genotype_converter::{
-    batch_convert_genotypes, genotype_to_dosage, genotype_to_dosage_with_flip,
-};
+use genetics_processor::genotype_converter::{batch_convert_genotypes, genotype_to_dosage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Genotype to Dosage Conversion Example ===\n");
@@ -96,40 +94,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Example 4: Strand flipping
-    println!("\n--- Example 4: Strand Flipping ---");
-    println!("Handling genotypes on the opposite strand\n");
-
-    let flip_cases = vec![
-        ("AT", "T", "A", "Flips to TA"),
-        ("CG", "G", "C", "Flips to GC"),
-        ("AC", "T", "G", "Flips to TG"),
-    ];
-
-    for (genotype, ref_allele, alt_allele, description) in flip_cases {
-        // Try without flip (should fail)
-        let direct_result = genotype_to_dosage(genotype, ref_allele, alt_allele);
-
-        // Try with flip (should succeed)
-        let flip_result = genotype_to_dosage_with_flip(genotype, ref_allele, alt_allele)?;
-
-        println!(
-            "  {} with REF={}, ALT={} - {}",
-            genotype, ref_allele, alt_allele, description
-        );
-        println!(
-            "    Direct: {}",
-            if direct_result.is_err() {
-                "Failed (as expected)"
-            } else {
-                "Succeeded"
-            }
-        );
-        println!("    With flip: dosage = {}", flip_result.unwrap_or(-1.0));
-    }
-
-    // Example 5: Batch conversion
-    println!("\n--- Example 5: Batch Conversion ---");
+    // Example 4: Batch conversion
+    println!("\n--- Example 4: Batch Conversion ---");
     println!("Converting multiple genotypes at once\n");
 
     let batch = vec![
@@ -172,8 +138,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Example 6: Realistic scenario
-    println!("\n--- Example 6: Realistic VCF Merging Scenario ---");
+    // Example 5: Realistic scenario
+    println!("\n--- Example 5: Realistic VCF Merging Scenario ---");
     println!("Simulating merging 23andMe data with VCF imputed data\n");
 
     // Simulated VCF records at specific positions
@@ -236,7 +202,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  • Genotyped data (23andMe) takes priority over imputed data");
     println!("  • Missing genotypes (--) use imputed dosages from VCF");
     println!("  • Dosage scale: 0.0=REF/REF, 1.0=REF/ALT, 2.0=ALT/ALT");
-    println!("  • Strand flipping can resolve some allele mismatches");
     println!("  • Batch conversion is efficient for large datasets");
 
     Ok(())

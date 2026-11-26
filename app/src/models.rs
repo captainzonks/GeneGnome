@@ -4,8 +4,8 @@
 // Description: Data structures for 51-sample genomic data processing
 // Author: Matt Barham
 // Created: 2025-11-12
-// Modified: 2025-11-12
-// Version: 2.0.0
+// Modified: 2026-11-26
+// Version: 3.0.0
 // ==============================================================================
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ pub enum DataSource {
     Imputed,
     /// Imputed with low quality (R2 < 0.3)
     ImputedLowQual,
+    /// No usable call
+    Missing,
 }
 
 impl DataSource {
@@ -27,6 +29,7 @@ impl DataSource {
             DataSource::Genotyped => "Genotyped",
             DataSource::Imputed => "Imputed",
             DataSource::ImputedLowQual => "ImputedLowQual",
+            DataSource::Missing => "Missing",
         }
     }
 }
@@ -37,11 +40,11 @@ pub struct SampleData {
     /// Sample identifier (e.g., "samp1", "samp2", ..., "samp50", "samp51")
     pub sample_id: String,
 
-    /// Phased genotype (e.g., "0|0", "0|1", "1|0", "1|1")
+    /// Phased genotype (e.g., "0|0", "0|1", "1|0", "1|1"), ".|." if missing
     pub genotype: String,
 
-    /// Allele dosage (0.0 to 2.0)
-    pub dosage: f64,
+    /// Allele dosage (0.0 to 2.0), None if missing
+    pub dosage: Option<f64>,
 
     /// Source of this sample's data
     pub source: DataSource,

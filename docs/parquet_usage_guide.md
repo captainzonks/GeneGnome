@@ -1,5 +1,9 @@
 # Parquet Usage Guide
 
+> **Missing calls.** `dosage` is null where a sample has no usable call
+> (`source` is `Missing`). Most tools skip nulls in averages; handle them
+> explicitly before converting to an integer or fixed array type.
+
 ## What is Parquet?
 
 Apache Parquet is a columnar storage format optimized for analytical queries on large datasets. For genomic data with millions of variants across multiple samples, Parquet is ideal because it:

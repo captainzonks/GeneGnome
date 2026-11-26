@@ -8,7 +8,7 @@ Description: What is wrong or missing in GeneGnome today, in priority order
 Author: Matt Barham
 Created: 2026-11-26
 Modified: 2026-11-26
-Version: 1.0.0
+Version: 1.1.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -21,10 +21,6 @@ Items are in priority order. Released changes are listed in
 
 ## 1. Merge correctness
 
-- [ ] Match 23andMe genotypes by position and then compare alleles, so that
-      homozygous and reverse-ordered calls count as genotyped
-- [ ] Mark a variant with no user data as missing instead of `0|0`
-- [ ] Apply strand-flip handling in the worker merge
 - [ ] Decide whether the quality threshold should use the user's imputation R²
       as well as the reference panel's
 - [ ] Golden-file tests for the merge, with synthetic inputs and expected output
@@ -66,6 +62,8 @@ implemented.
 ## 6. Smaller defects
 
 - [ ] Job status endpoint reports completed jobs as queued
+- [ ] Genotyped and imputed variant counts reflect the reference panel's
+      `TYPED` flag, not where the user's calls came from
 - [ ] Processing progress is reported as a fixed 50% by the status endpoint
 - [ ] Output file hashes are stored as a placeholder
 - [ ] Remove the older pipeline in `app/src/processor.rs`

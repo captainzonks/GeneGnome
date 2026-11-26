@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-11-26
-Version: 1.4.0
+Version: 1.5.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -110,6 +110,9 @@ Full policy in [PRIVACY.md](PRIVACY.md).
 - **Per-chromosome output** — the worker merges and writes one chromosome at a
   time (Parquet in 10,000-row batches, `app/src/output.rs`). Parsed input files
   are still held in memory for the whole job
+- **Genotype merge** — a 23andMe call made of the panel variant's alleles
+  counts as genotyped; otherwise the imputed value is used. With neither, the
+  user's sample is written as missing (`.|.`, empty dosage, source `Missing`)
 - **Quality filtering** — optional R² threshold (none, 0.8, 0.9), applied to
   each variant's imputation quality in the reference panel
 - **Polygenic score pass-through** — an uploaded score table is written to
@@ -429,13 +432,8 @@ point-in-time record of that investigation, not as current output.
   mitochondrial variants are not processed.
 - **GRCh37/hg19 only.** No liftover. Inputs on another build will merge
   incorrectly rather than fail loudly.
-- **Genotyped calls are matched too narrowly.** The merge recognizes a
-  23andMe genotype only when its two alleles read as reference then alternate.
-  Other genotyped sites fall back to the imputed value.
-- **Missing user data is written as homozygous reference.** A panel variant
-  absent from both user inputs appears as `0|0`, not as missing.
-- **No strand-flip handling in the merge.** The library has a reverse-complement
-  helper, but the worker does not use it.
+- **No strand flipping.** 23andMe reports the positive strand of GRCh37, the
+  panel's strand. A genotype with other alleles is not used.
 - **Fixed merge model.** 50 reference samples plus one user sample. The panel
   is not swappable without code changes.
 - **Reference preparation needs R.** `scripts/convert_reference_to_db.R` is
@@ -494,7 +492,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 80 tests: app 47, api-gateway 21, worker 12
+# Test — 84 tests: app 51, api-gateway 21, worker 12
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test

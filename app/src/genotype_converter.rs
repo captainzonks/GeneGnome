@@ -4,8 +4,8 @@
 // Description: Converts 23andMe genotypes to allele dosage values for VCF merging
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 2.0.0
 // ==============================================================================
 // Algorithm:
 //   Given REF allele and ALT allele from VCF:
@@ -152,64 +152,6 @@ pub fn genotype_to_dosage(
     Ok(Some(alt_count as f64))
 }
 
-/// Convert genotype to dosage with strand flipping support
-///
-/// This function attempts to convert the genotype, and if it fails due to
-/// allele mismatch, it tries the reverse complement (strand flip).
-///
-/// # Arguments
-/// * `genotype` - Two-character genotype string
-/// * `ref_allele` - Reference allele from VCF
-/// * `alt_allele` - Alternate allele from VCF
-///
-/// # Returns
-/// * `Ok(Some(dosage))` - Successfully converted
-/// * `Ok(None)` - Missing genotype
-/// * `Err(GenotypeConversionError)` - Cannot convert even with strand flip
-pub fn genotype_to_dosage_with_flip(
-    genotype: &str,
-    ref_allele: &str,
-    alt_allele: &str,
-) -> Result<Option<f64>, GenotypeConversionError> {
-    // Try direct conversion first
-    match genotype_to_dosage(genotype, ref_allele, alt_allele) {
-        Ok(result) => Ok(result),
-        Err(GenotypeConversionError::AllelesMismatch { .. }) => {
-            // Try reverse complement (strand flip)
-            let flipped_genotype = flip_strand(genotype);
-            genotype_to_dosage(&flipped_genotype, ref_allele, alt_allele)
-        }
-        Err(e) => Err(e),
-    }
-}
-
-/// Flip genotype to reverse complement (strand flip)
-///
-/// # Mapping
-/// - A ↔ T
-/// - C ↔ G
-/// - G ↔ C
-/// - T ↔ A
-///
-/// # Arguments
-/// * `genotype` - Two-character genotype string
-///
-/// # Returns
-/// * Reverse complement genotype string
-fn flip_strand(genotype: &str) -> String {
-    genotype
-        .chars()
-        .map(|c| match c {
-            'A' => 'T',
-            'T' => 'A',
-            'C' => 'G',
-            'G' => 'C',
-            '-' => '-',
-            _ => c, // Unknown character, keep as-is
-        })
-        .collect()
-}
-
 /// Batch convert multiple genotypes to dosages
 ///
 /// This is useful for converting all genotypes at positions that match VCF records.
@@ -301,30 +243,6 @@ mod tests {
             result,
             Err(GenotypeConversionError::AllelesMismatch { .. })
         ));
-    }
-
-    #[test]
-    fn test_strand_flip() {
-        assert_eq!(flip_strand("AT"), "TA");
-        assert_eq!(flip_strand("CG"), "GC");
-        assert_eq!(flip_strand("AC"), "TG");
-        assert_eq!(flip_strand("--"), "--");
-    }
-
-    #[test]
-    fn test_genotype_with_flip() {
-        // Direct match should work
-        assert_eq!(
-            genotype_to_dosage_with_flip("TT", "T", "C").unwrap(),
-            Some(0.0)
-        );
-
-        // Strand flip: AT genotype with REF=A, ALT=T should fail direct but succeed with flip
-        // AT flips to TA, which is REF/ALT → 1.0
-        assert_eq!(
-            genotype_to_dosage_with_flip("AT", "T", "A").unwrap(),
-            Some(1.0)
-        );
     }
 
     #[test]

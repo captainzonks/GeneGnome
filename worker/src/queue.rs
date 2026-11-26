@@ -4,8 +4,8 @@
 // Description: Job queue operations for consuming jobs from Redis
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.0.1
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -36,17 +36,6 @@ pub enum QualityThreshold {
     R080, // R² ≥ 0.8
     #[default]
     R090, // R² ≥ 0.9 (default, matches R script)
-}
-
-impl QualityThreshold {
-    /// Get the numeric threshold value
-    pub fn value(&self) -> Option<f64> {
-        match self {
-            QualityThreshold::None => None,
-            QualityThreshold::R080 => Some(0.8),
-            QualityThreshold::R090 => Some(0.9),
-        }
-    }
 }
 
 /// Job payload from Redis queue (must match API gateway)
