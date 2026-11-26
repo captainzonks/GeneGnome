@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ci_rls_test.sh - Run the RLS integration test against a throwaway Postgres
+# ci_rls_test.sh - Run the database integration tests on a throwaway Postgres
 # ==============================================================================
 # Description: Starts a disposable Postgres container initialized exactly like a
-#              fresh deployment (00-create-app-role.sh, then init.sql), runs
-#              api-gateway/tests/rls_enforcement.rs as the runtime role, and
-#              removes the container. Used by CI and runnable locally.
+#              fresh deployment (00-create-app-role.sh, then init.sql), runs the
+#              RLS and schema contract tests in api-gateway/tests as the runtime
+#              role, and removes the container. Used by CI and runnable locally.
 # Author: Matt Barham
 # Created: 2026-11-25
-# Modified: 2026-11-25
-# Version: 1.0.1
+# Modified: 2026-11-26
+# Version: 1.0.2
 # Requirements: docker, cargo, openssl
 # Usage: scripts/ci_rls_test.sh
 # ==============================================================================
@@ -68,11 +68,11 @@ port="${port##*:}"
 
 cd "${repo_root}/api-gateway"
 TEST_DATABASE_URL="postgresql://genetics_app:${app_password}@127.0.0.1:${port}/genetics" \
-    cargo test --locked --test rls_enforcement -- --test-threads=1 --nocapture 2>&1 |
+    cargo test --locked --test rls_enforcement --test schema_contract -- --test-threads=1 --nocapture 2>&1 |
     tee "${work_dir}/test.log"
 
 # The test returns early when it has no database. That must not count as a pass.
 if grep -q 'SKIPPED' "${work_dir}/test.log"; then
-    printf 'RLS tests were skipped\n' >&2
+    printf 'Database tests were skipped\n' >&2
     exit 1
 fi
