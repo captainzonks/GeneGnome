@@ -295,6 +295,12 @@ is server-side and does involve upload.
 
 ### Upgrading an existing deployment
 
+A fresh database gets its whole schema from `database/init.sql`. The files in
+`database/migrations/` only upgrade older volumes. A database first created
+from an `init.sql` older than this note cannot accept jobs; it holds no
+completed work, so stop the stack, empty the Postgres data directory, and start
+it again.
+
 Deployments created before the role separation in
 `database/migrations/004_separate_runtime_role_from_owner.sql` must be
 upgraded in a specific order — provision the `genetics_app` password secret,
@@ -467,7 +473,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 67 tests: app 42, api-gateway 16, worker 9
+# Test — 68 tests: app 42, api-gateway 17, worker 9
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test
@@ -477,8 +483,9 @@ cargo fmt --check
 cargo clippy --all-targets
 ```
 
-`api-gateway/tests/rls_enforcement.rs` is an integration test and needs a live
-PostgreSQL with the `genetics_app` role provisioned; see the ADR for setup.
+`api-gateway/tests/rls_enforcement.rs` and `schema_contract.rs` are integration
+tests that need a live PostgreSQL. `scripts/ci_rls_test.sh` runs both against a
+throwaway container.
 
 ### Docker images
 

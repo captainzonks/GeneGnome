@@ -15,6 +15,10 @@ Repository: https://github.com/captainzonks/GeneGnome
 
 ## Overview
 
+**Migrations upgrade existing volumes only.** A fresh deployment gets the whole
+schema from `database/init.sql`; do not run these after it. Put every schema
+change both in a new migration and in `init.sql`.
+
 This directory contains sequential database schema migrations for the genetics processing service. Migrations are numbered and must be applied in order.
 
 **Current Schema Version**: 1.1.0

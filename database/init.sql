@@ -4,8 +4,8 @@
 -- Description: PostgreSQL schema for genetic data processing service
 -- Author: Matt Barham
 -- Created: 2025-10-31
--- Modified: 2026-09-08
--- Version: 1.3.0
+-- Modified: 2026-11-25
+-- Version: 1.3.1
 -- Security: Row-level security (FORCED, non-owner runtime role), append-only
 --           audit log, token-based downloads. See
 --           docs/adr/0001-rls-role-separation.md and
@@ -15,6 +15,11 @@
 --           database/00-create-app-role.sh runs before this file (via
 --           docker-entrypoint-initdb.d ordering) and creates genetics_app;
 --           POSTGRES_USER for a fresh deployment should be genetics_owner.
+--
+-- This file is the complete schema for a fresh deployment: it includes
+-- everything migrations 001-004 add. Do NOT run those migrations after it.
+-- They exist to upgrade older volumes. A schema change needs both a new
+-- migration and the same change here.
 -- ==============================================================================
 
 -- Create genetics database schema
@@ -66,7 +71,26 @@ CREATE TABLE IF NOT EXISTS genetics_jobs (
     error_message TEXT,
     result_path TEXT,
     result_hash_sha256 TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSONB DEFAULT '{}'::jsonb,
+
+    -- Email delivery and token-based download (migration 001)
+    user_email TEXT,
+    download_token TEXT UNIQUE,
+    download_password_hash TEXT, -- Argon2id
+    download_attempts INTEGER DEFAULT 0 NOT NULL,
+    last_download_attempt TIMESTAMPTZ,
+    max_download_attempts INTEGER DEFAULT 5 NOT NULL,
+    emailed_at TIMESTAMPTZ,
+
+    -- Email resend rate limit (migration 003)
+    last_email_resent_at TIMESTAMPTZ,
+
+    CONSTRAINT genetics_jobs_email_format CHECK (
+        user_email IS NULL OR user_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+    ),
+    CONSTRAINT genetics_jobs_download_attempts_valid CHECK (
+        download_attempts >= 0 AND download_attempts <= max_download_attempts
+    )
 );
 
 -- Indexes for jobs table
@@ -75,6 +99,17 @@ CREATE INDEX idx_genetics_jobs_status ON genetics_jobs(status);
 CREATE INDEX idx_genetics_jobs_created_at ON genetics_jobs(created_at DESC);
 CREATE INDEX idx_genetics_jobs_expires_at ON genetics_jobs(expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX idx_genetics_jobs_status_started_at ON genetics_jobs(status, started_at); -- Composite index for stuck jobs query
+CREATE INDEX idx_genetics_jobs_download_token ON genetics_jobs(download_token)
+    WHERE download_token IS NOT NULL;
+CREATE INDEX idx_genetics_jobs_user_email ON genetics_jobs(user_email)
+    WHERE user_email IS NOT NULL;
+CREATE INDEX idx_genetics_jobs_needs_email ON genetics_jobs(status, emailed_at)
+    WHERE status = 'completed' AND emailed_at IS NULL;
+CREATE INDEX idx_genetics_jobs_download_rate_limit ON genetics_jobs(
+    download_token,
+    download_attempts,
+    last_download_attempt
+) WHERE download_token IS NOT NULL;
 
 -- Enable row-level security
 ALTER TABLE genetics_jobs ENABLE ROW LEVEL SECURITY;
@@ -120,6 +155,93 @@ CREATE POLICY genetics_files_isolation ON genetics_files
     TO genetics_app
     USING (user_id = current_setting('app.current_user_id', TRUE)::TEXT)
     WITH CHECK (user_id = current_setting('app.current_user_id', TRUE)::TEXT);
+
+-- ==============================================================================
+-- DOWNLOAD ATTEMPTS TABLE (append-only; rows leave only with their job)
+-- ==============================================================================
+
+CREATE TABLE genetics_download_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID NOT NULL REFERENCES genetics_jobs(id) ON DELETE CASCADE,
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ip_address TEXT,
+    user_agent TEXT,
+    token_provided BOOLEAN NOT NULL,
+    token_valid BOOLEAN,
+    password_provided BOOLEAN NOT NULL,
+    password_valid BOOLEAN,
+    attempt_result TEXT NOT NULL CHECK (
+        attempt_result IN (
+            'success',
+            'invalid_token',
+            'invalid_password',
+            'max_attempts_exceeded',
+            'job_expired',
+            'job_not_found',
+            'rate_limited'
+        )
+    ),
+    details JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX idx_genetics_download_attempts_job_id ON genetics_download_attempts(job_id);
+CREATE INDEX idx_genetics_download_attempts_timestamp ON genetics_download_attempts(attempted_at DESC);
+CREATE INDEX idx_genetics_download_attempts_result ON genetics_download_attempts(attempt_result);
+CREATE INDEX idx_genetics_download_attempts_ip ON genetics_download_attempts(ip_address);
+
+CREATE RULE genetics_download_attempts_no_update AS
+    ON UPDATE TO genetics_download_attempts DO INSTEAD NOTHING;
+
+CREATE OR REPLACE FUNCTION audit_download_attempt_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Log the deletion to genetics_audit
+    INSERT INTO genetics_audit (
+        event_type,
+        user_id,
+        action,
+        result,
+        details,
+        severity
+    ) VALUES (
+        'job_cleanup',
+        'system',
+        'download_attempt_deleted',
+        'success',
+        jsonb_build_object(
+            'download_attempt_id', OLD.id,
+            'job_id', OLD.job_id,
+            'attempted_at', OLD.attempted_at,
+            'attempt_result', OLD.attempt_result
+        ),
+        'info'
+    );
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to audit deletions (fires BEFORE delete)
+CREATE TRIGGER trigger_audit_download_attempt_deletion
+    BEFORE DELETE ON genetics_download_attempts
+    FOR EACH ROW
+    EXECUTE FUNCTION audit_download_attempt_deletion();
+
+-- ==============================================================================
+-- RECOVERY CODES TABLE (self-service deletion)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS genetics_recovery_codes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID NOT NULL REFERENCES genetics_jobs(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used BOOLEAN DEFAULT false NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_recovery_codes_job_id ON genetics_recovery_codes(job_id);
+CREATE INDEX idx_recovery_codes_unused ON genetics_recovery_codes(job_id)
+    WHERE used = false;
 
 -- ==============================================================================
 -- AUDIT LOG TABLE
@@ -219,12 +341,18 @@ $$;
 COMMENT ON FUNCTION genetics.resolve_job_owner(UUID) IS
     'SECURITY DEFINER (bypasses RLS as genetics_owner). Returns only the owning user_id for a job_id, nothing else. Used to seed app.current_user_id before RLS-scoped queries in api-gateway.';
 
--- genetics.resolve_job_owner_by_token(TEXT) is NOT defined here: it depends
--- on the download_token column, which doesn't exist until
--- migrations/001_add_email_downloads.sql runs. It's defined in
--- migrations/004_separate_runtime_role_from_owner.sql instead, applied
--- after 001-003 in the standard replay order (init.sql -> 001 -> 002 ->
--- 003 -> 004) that both a fresh deployment and an existing one follow.
+CREATE OR REPLACE FUNCTION genetics.resolve_job_owner_by_token(p_token TEXT)
+RETURNS TABLE(id UUID, user_id TEXT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = genetics, pg_catalog
+AS $$
+    SELECT id, user_id FROM genetics.genetics_jobs WHERE download_token = p_token;
+$$;
+
+COMMENT ON FUNCTION genetics.resolve_job_owner_by_token(TEXT) IS
+    'SECURITY DEFINER (bypasses RLS as genetics_owner). Resolves id/user_id from a download_token, nothing else. Used to seed app.current_user_id before RLS-scoped download/visualization queries in api-gateway.';
 
 -- Cross-user sweeps for worker's stuck-job recovery and 24h cleanup loops.
 -- Each returned job is then acted on inside its own RLS-scoped, per-owner
@@ -260,6 +388,74 @@ COMMENT ON FUNCTION genetics.list_jobs_for_cleanup(TIMESTAMPTZ) IS
     'SECURITY DEFINER (bypasses RLS as genetics_owner). Cross-user discovery for worker''s 24h job cleanup sweep; returns only id/user_id, no job content.';
 
 -- ==============================================================================
+-- DOWNLOAD RATE LIMIT FUNCTIONS (operator use)
+-- ==============================================================================
+
+CREATE OR REPLACE FUNCTION check_download_allowed(job_uuid UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    job_record RECORD;
+    rate_limit_window INTERVAL := '1 minute';
+    max_attempts_per_window INTEGER := 3;
+    recent_attempts INTEGER;
+BEGIN
+    -- Get job record
+    SELECT * INTO job_record
+    FROM genetics_jobs
+    WHERE id = job_uuid;
+
+    -- Job must exist
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Job must be completed
+    IF job_record.status != 'completed' THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Job must not be expired
+    IF job_record.expires_at IS NOT NULL AND job_record.expires_at < NOW() THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Check max attempts not exceeded
+    IF job_record.download_attempts >= job_record.max_download_attempts THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Check rate limiting (max 3 attempts per minute)
+    IF job_record.last_download_attempt IS NOT NULL THEN
+        SELECT COUNT(*) INTO recent_attempts
+        FROM genetics_download_attempts
+        WHERE job_id = job_uuid
+            AND attempted_at > NOW() - rate_limit_window;
+
+        IF recent_attempts >= max_attempts_per_window THEN
+            RETURN FALSE;
+        END IF;
+    END IF;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION check_download_allowed(UUID) IS 'Validates if a download attempt should be allowed (rate limiting + max attempts)';
+
+-- Function to increment download attempts
+CREATE OR REPLACE FUNCTION increment_download_attempt(job_uuid UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE genetics_jobs
+    SET download_attempts = download_attempts + 1,
+        last_download_attempt = NOW()
+    WHERE id = job_uuid;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION increment_download_attempt(UUID) IS 'Increments download attempt counter and updates timestamp';
+
+-- ==============================================================================
 -- VIEWS
 -- ==============================================================================
 
@@ -292,6 +488,41 @@ WHERE severity IN ('warning', 'critical')
     OR event_type LIKE '%denied'
 ORDER BY timestamp DESC;
 
+CREATE OR REPLACE VIEW genetics_download_stats AS
+SELECT
+    j.user_email,
+    COUNT(DISTINCT j.id) as total_jobs_with_downloads,
+    COUNT(DISTINCT CASE WHEN j.download_attempts > 0 THEN j.id END) as jobs_with_attempts,
+    SUM(j.download_attempts) as total_download_attempts,
+    COUNT(DISTINCT da.id) FILTER (WHERE da.attempt_result = 'success') as successful_downloads,
+    COUNT(DISTINCT da.id) FILTER (WHERE da.attempt_result = 'invalid_password') as failed_password_attempts,
+    COUNT(DISTINCT da.id) FILTER (WHERE da.attempt_result = 'max_attempts_exceeded') as locked_out_jobs,
+    MAX(j.emailed_at) as last_email_sent
+FROM genetics_jobs j
+LEFT JOIN genetics_download_attempts da ON j.id = da.job_id
+WHERE j.user_email IS NOT NULL
+GROUP BY j.user_email;
+
+COMMENT ON VIEW genetics_download_stats IS 'Download security statistics per user email';
+
+-- View for failed download attempts (security monitoring)
+CREATE OR REPLACE VIEW genetics_failed_downloads AS
+SELECT
+    da.attempted_at,
+    da.ip_address,
+    da.user_agent,
+    da.attempt_result,
+    j.user_email,
+    j.id as job_id,
+    j.download_attempts,
+    j.max_download_attempts
+FROM genetics_download_attempts da
+JOIN genetics_jobs j ON da.job_id = j.id
+WHERE da.attempt_result != 'success'
+ORDER BY da.attempted_at DESC;
+
+COMMENT ON VIEW genetics_failed_downloads IS 'All failed download attempts for security monitoring';
+
 -- ==============================================================================
 -- GRANTS
 -- ==============================================================================
@@ -305,8 +536,11 @@ ORDER BY timestamp DESC;
 GRANT USAGE ON SCHEMA genetics TO genetics_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON genetics_jobs TO genetics_app;
 GRANT SELECT, INSERT ON genetics_files TO genetics_app;
+GRANT SELECT, INSERT, UPDATE ON genetics_recovery_codes TO genetics_app;
+GRANT INSERT ON genetics_download_attempts TO genetics_app;
 
 GRANT EXECUTE ON FUNCTION genetics.resolve_job_owner(UUID) TO genetics_app;
+GRANT EXECUTE ON FUNCTION genetics.resolve_job_owner_by_token(TEXT) TO genetics_app;
 GRANT EXECUTE ON FUNCTION genetics.list_stuck_jobs(TIMESTAMPTZ) TO genetics_app;
 GRANT EXECUTE ON FUNCTION genetics.list_jobs_for_cleanup(TIMESTAMPTZ) TO genetics_app;
 
@@ -324,7 +558,7 @@ VALUES (
     'system',
     'database_initialized',
     'success',
-    '{"schema_version": "1.0.0", "created_at": "2025-10-31"}'::jsonb,
+    '{"schema_version": "1.3.0", "created_at": "2025-10-31"}'::jsonb,
     'info'
 );
 
