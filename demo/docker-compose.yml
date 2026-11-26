@@ -1,0 +1,253 @@
+# ==============================================================================
+# DOCKER-COMPOSE.YML - GeneGnome Demo Stack
+# ==============================================================================
+# Description: Self-contained stack running GeneGnome on synthetic data, for
+#              trying it from a fresh clone. Not a deployment: storage is a
+#              plain Docker volume (no LUKS), mail is captured locally and
+#              secrets are throwaway. Start it with scripts/run_demo.sh.
+# Author: Matt Barham
+# Created: 2026-11-26
+# Modified: 2026-11-26
+# Version: 1.0.0
+# ==============================================================================
+
+name: genegnome-demo
+
+####################################################################
+# EXTENSIONS
+####################################################################
+
+x-mail-environment: &mail-environment
+  SMTP_HOST: mailpit
+  SMTP_PORT: 1025
+  SMTP_USERNAME: demo
+  SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+  SMTP_USE_TLS: "false"
+  SMTP_USE_SSL: "false"
+  SMTP_FROM_EMAIL: demo@example.com
+  SMTP_FROM_NAME: GeneGnome Demo
+  GENETICS_DOWNLOAD_BASE_URL: http://localhost:${DEMO_PORT:-8088}/download
+  GENETICS_EMAIL_TEMPLATE_DIR: /app/templates/email
+  REDIS_URL: redis://redis:6379
+  ENCRYPTED_VOLUME_PATH: /vault
+  RUST_LOG: info
+
+####################################################################
+# NETWORKS
+####################################################################
+
+networks:
+  demo:
+
+####################################################################
+# VOLUMES
+####################################################################
+
+volumes:
+  vault:
+  database:
+  initdb:
+  templates:
+
+####################################################################
+# SECRETS
+####################################################################
+
+secrets:
+  owner_password:
+    file: ./secrets/owner_password
+  app_password:
+    file: ./secrets/app_password
+  smtp_password:
+    file: ./secrets/smtp_password
+
+####################################################################
+# SERVICES
+####################################################################
+
+services:
+  #======================================================================
+  # SETUP - Generate the synthetic data and stage files, then exit
+  # Files other containers read are copied into volumes with readable modes, so
+  # the demo works whatever the umask of the clone.
+  setup:
+    image: python:3.14.10-slim
+    network_mode: none
+    entrypoint: ["/bin/sh", "-euc"]
+    command:
+      - >-
+        cp /repo/database/00-create-app-role.sh /repo/database/init.sql /initdb/;
+        cp -r /repo/templates/. /templates/;
+        chmod -R u=rwX,go=rX /initdb /templates;
+        exec python -I /demo/generate_data.py
+        --vault=/vault --inputs=/data --vault-owner=3000:3000
+        --inputs-owner=${DEMO_UID:-1000}:${DEMO_GID:-1000}
+    volumes:
+      - ./generate_data.py:/demo/generate_data.py:ro
+      - ./data:/data
+      - vault:/vault
+      - initdb:/initdb
+      - templates:/templates
+      - ../database:/repo/database:ro
+      - ../templates:/repo/templates:ro
+
+  #======================================================================
+  # POSTGRES - Job database
+  postgres:
+    image: postgres:18.7
+    networks: [demo]
+    environment:
+      POSTGRES_DB: genetics
+      POSTGRES_USER: genetics_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/owner_password
+      GENETICS_APP_DB_PASSWORD_FILE: /run/secrets/app_password
+    secrets: [owner_password, app_password]
+    volumes:
+      - database:/var/lib/postgresql
+      - initdb:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      # TCP only answers once first-start initialization has finished
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "genetics_owner", "-d", "genetics"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  #======================================================================
+  # REDIS - Job queue
+  redis:
+    image: redis:8.12.0-alpine
+    networks: [demo]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  #======================================================================
+  # MAILPIT - Captures the download email for viewing in a browser
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    networks: [demo]
+    command: ["--smtp-auth-accept-any", "--smtp-auth-allow-insecure"]
+    ports:
+      - 127.0.0.1:${DEMO_MAIL_PORT:-8025}:8025
+
+  #======================================================================
+  # API - REST API gateway
+  api:
+    image: genegnome-demo/api-gateway
+    build:
+      context: ..
+      dockerfile: api-gateway/Dockerfile
+    networks: [demo]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        DATABASE_URL="postgresql://genetics_app:$$(cat /run/secrets/app_password)@postgres:5432/genetics";
+        export DATABASE_URL;
+        exec /usr/local/bin/genetics-api-gateway
+    environment: *mail-environment
+    secrets: [app_password, smtp_password]
+    volumes:
+      - vault:/vault
+      - templates:/app/templates:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8099/api/genetics/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  #======================================================================
+  # WORKER - Processes queued jobs
+  worker:
+    image: genegnome-demo/worker
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    networks: [demo]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        DATABASE_URL="postgresql://genetics_app:$$(cat /run/secrets/app_password)@postgres:5432/genetics";
+        export DATABASE_URL;
+        exec /usr/local/bin/genetics-worker
+    environment: *mail-environment
+    secrets: [app_password, smtp_password]
+    volumes:
+      - vault:/vault
+      - templates:/app/templates:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "genetics-worker"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  #======================================================================
+  # FRONTEND - Static web interface
+  frontend:
+    image: genegnome-demo/frontend
+    build:
+      context: ../frontend
+    networks: [demo]
+    healthcheck:
+      # nginx listens on IPv4 only, and "localhost" resolves to ::1 first
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  #======================================================================
+  # PROXY - One origin for the frontend and the API
+  proxy:
+    image: nginx:1.30-alpine
+    networks: [demo]
+    ports:
+      - 127.0.0.1:${DEMO_PORT:-8088}:80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  #======================================================================
+  # SMOKE - End-to-end check, run on demand
+  smoke:
+    image: python:3.14.10-slim
+    profiles: [test]
+    networks: [demo]
+    command: ["python", "-I", "/demo/smoke_test.py"]
+    volumes:
+      - ./smoke_test.py:/demo/smoke_test.py:ro
+      - ./data:/data:ro
+    depends_on:
+      proxy:
+        condition: service_started
+      worker:
+        condition: service_healthy
+      mailpit:
+        condition: service_started

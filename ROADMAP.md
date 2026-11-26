@@ -8,7 +8,7 @@ Description: What is wrong or missing in GeneGnome today, in priority order
 Author: Matt Barham
 Created: 2026-11-26
 Modified: 2026-11-26
-Version: 1.1.0
+Version: 1.2.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -23,7 +23,6 @@ Items are in priority order. Released changes are listed in
 
 - [ ] Decide whether the quality threshold should use the user's imputation R²
       as well as the reference panel's
-- [ ] Golden-file tests for the merge, with synthetic inputs and expected output
 
 ## 2. Data handling
 
@@ -39,8 +38,6 @@ Items are in priority order. Released changes are listed in
 
 ## 3. Demonstrability
 
-- [ ] Synthetic reference panel and inputs in the repository, so the whole
-      pipeline runs from a clone without genetic data
 - [ ] Screenshots of the upload, progress and visualization pages
 - [ ] A committed benchmark that reproduces the performance figures
 
@@ -68,3 +65,5 @@ implemented.
 - [ ] Output file hashes are stored as a placeholder
 - [ ] Remove the older pipeline in `app/src/processor.rs`
 - [ ] Take the public hostnames out of the Traefik rules in `traefik/`
+- [ ] Fix the image health checks: the API image probes the wrong port and path,
+      and the frontend image probes `localhost`, which resolves to IPv6 first

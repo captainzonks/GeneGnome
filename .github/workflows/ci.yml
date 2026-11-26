@@ -3,12 +3,13 @@
 # ==============================================================================
 # Description: Format, lint and test each crate, check dependency advisories,
 #              run the row-level security test against a real Postgres and the
-#              queue and attempt limiter tests against a real Redis, and build the three
-#              application images. Publishes and deploys nothing.
+#              queue and attempt limiter tests against a real Redis, run the demo
+#              end to end, and build the three application images. Publishes and
+#              deploys nothing.
 # Author: Matt Barham
 # Created: 2026-11-25
 # Modified: 2026-11-26
-# Version: 1.1.0
+# Version: 1.2.0
 # ==============================================================================
 
 name: CI
@@ -178,6 +179,18 @@ jobs:
             cargo deny --manifest-path "${crate}/Cargo.toml" --locked --config deny.toml \
               check advisories sources
           done
+
+  demo:
+    name: demo end to end (synthetic data)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run one synthetic job through the demo stack
+        run: scripts/run_demo.sh test
 
   images:
     name: docker build (${{ matrix.image }})

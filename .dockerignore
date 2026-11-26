@@ -27,3 +27,6 @@ genome-data/
 
 # Logs
 *.log
+
+# Demo stack, including its generated data and secrets
+demo/

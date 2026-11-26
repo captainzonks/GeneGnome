@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-11-26
-Version: 1.5.0
+Version: 1.6.0
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -216,6 +216,34 @@ to load, `vcf-app.js` falls back to generation without reference alleles.
 
 The later merge step — combining imputation results with the reference panel —
 is server-side and does involve upload.
+
+---
+
+## Demo
+
+Try the whole pipeline on synthetic data. Only Docker with Compose v2 is needed.
+
+```bash
+git clone https://github.com/captainzonks/GeneGnome.git
+cd GeneGnome
+scripts/run_demo.sh
+```
+
+The first run compiles the Rust services, which takes several minutes. Then:
+
+1. Open <http://localhost:8088/process> and upload every file in `demo/data/`
+   except `expected.json`, using any email address.
+2. Open <http://localhost:8025> to read the captured download email.
+3. Follow its links to download the results or view the charts.
+
+`scripts/run_demo.sh test` does the same without a browser and compares every
+merged user call with the result the data generator expects.
+`scripts/run_demo.sh down` stops the demo and deletes its data. Set `DEMO_PORT`
+or `DEMO_MAIL_PORT` if those ports are taken.
+
+All demo data is random and describes no real person or variant. The demo is not
+a deployment: it has no encrypted volume, no TLS and throwaway secrets, and it
+listens on localhost only.
 
 ---
 
