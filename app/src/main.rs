@@ -13,15 +13,7 @@ use clap::Parser;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod processor;
-mod validator;
-mod secure_delete;
-mod audit;
-mod parsers;
-mod genotype_converter;
-mod models;
-mod reference_panel;
-mod output;
+use genetics_processor::{audit, models, processor};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -93,7 +85,10 @@ async fn main() -> Result<()> {
         "r09" => models::QualityThreshold::R09,
         "no-filter" | "nofilter" => models::QualityThreshold::NoFilter,
         _ => {
-            warn!("Invalid quality threshold '{}', using R09", args.quality_threshold);
+            warn!(
+                "Invalid quality threshold '{}', using R09",
+                args.quality_threshold
+            );
             models::QualityThreshold::R09
         }
     };

@@ -132,19 +132,21 @@ impl PgsParser {
     }
 
     /// Parse long-form CSV (original format)
-    fn parse_long_format(reader: &mut csv::Reader<std::fs::File>) -> Result<Vec<PgsRecord>, PgsParseError> {
+    fn parse_long_format(
+        reader: &mut csv::Reader<std::fs::File>,
+    ) -> Result<Vec<PgsRecord>, PgsParseError> {
         let mut unscaled = Vec::new();
 
         for (idx, result) in reader.deserialize().enumerate() {
-            let record: PgsRecord = result.map_err(|e| {
-                PgsParseError::CsvError(csv::Error::from(e))
-            })?;
+            let record: PgsRecord = result.map_err(PgsParseError::CsvError)?;
 
             // Validate score value is finite
             if !record.value.is_finite() {
-                return Err(PgsParseError::InvalidValue(
-                    format!("Non-finite value at record {}: {}", idx + 1, record.value)
-                ));
+                return Err(PgsParseError::InvalidValue(format!(
+                    "Non-finite value at record {}: {}",
+                    idx + 1,
+                    record.value
+                )));
             }
 
             unscaled.push(record);
@@ -161,7 +163,8 @@ impl PgsParser {
         let mut unscaled = Vec::new();
 
         // Extract PGS labels from headers (skip first column which is sample ID)
-        let pgs_labels: Vec<String> = headers.iter()
+        let pgs_labels: Vec<String> = headers
+            .iter()
             .skip(1)
             .map(|h| h.trim_matches('"').to_string())
             .collect();
@@ -171,26 +174,32 @@ impl PgsParser {
             let record = result.map_err(PgsParseError::CsvError)?;
 
             // First column is sample ID
-            let sample_id = record.get(0)
+            let sample_id = record
+                .get(0)
                 .ok_or(PgsParseError::EmptyFile)?
                 .trim_matches('"')
                 .to_string();
 
             // Remaining columns are PGS scores
             for (col_idx, value_str) in record.iter().skip(1).enumerate() {
-                let value: f64 = value_str.trim_matches('"')
-                    .parse()
-                    .map_err(|e| PgsParseError::InvalidValue(
-                        format!("Failed to parse value '{}' at row {}, col {}: {}",
-                            value_str, row_idx + 1, col_idx + 1, e)
-                    ))?;
+                let value: f64 = value_str.trim_matches('"').parse().map_err(|e| {
+                    PgsParseError::InvalidValue(format!(
+                        "Failed to parse value '{}' at row {}, col {}: {}",
+                        value_str,
+                        row_idx + 1,
+                        col_idx + 1,
+                        e
+                    ))
+                })?;
 
                 // Validate score value is finite
                 if !value.is_finite() {
-                    return Err(PgsParseError::InvalidValue(
-                        format!("Non-finite value at row {}, col {}: {}",
-                            row_idx + 1, col_idx + 1, value)
-                    ));
+                    return Err(PgsParseError::InvalidValue(format!(
+                        "Non-finite value at row {}, col {}: {}",
+                        row_idx + 1,
+                        col_idx + 1,
+                        value
+                    )));
                 }
 
                 unscaled.push(PgsRecord {
@@ -224,7 +233,7 @@ impl PgsParser {
         for record in records {
             by_label
                 .entry(record.label.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(record);
         }
 
@@ -238,11 +247,7 @@ impl PgsParser {
             let mean = sum / n;
 
             // Compute standard deviation
-            let variance: f64 = group
-                .iter()
-                .map(|r| (r.value - mean).powi(2))
-                .sum::<f64>()
-                / n;
+            let variance: f64 = group.iter().map(|r| (r.value - mean).powi(2)).sum::<f64>() / n;
             let std_dev = variance.sqrt();
 
             // Scale each record
@@ -353,7 +358,11 @@ mod tests {
 
         // Check mean is approximately 0
         let scaled_mean = (s1_scaled.value + s2_scaled.value + s3_scaled.value) / 3.0;
-        assert!(scaled_mean.abs() < 1e-10, "Mean should be ~0, got {}", scaled_mean);
+        assert!(
+            scaled_mean.abs() < 1e-10,
+            "Mean should be ~0, got {}",
+            scaled_mean
+        );
 
         // Check values are symmetric around mean
         assert!(s1_scaled.value < 0.0, "Below mean should be negative");
@@ -364,9 +373,15 @@ mod tests {
         // z1 = (1 - 2) / 0.8165 ≈ -1.2247
         // z2 = (2 - 2) / 0.8165 = 0
         // z3 = (3 - 2) / 0.8165 ≈ 1.2247
-        assert!((s1_scaled.value - (-1.2247)).abs() < 0.01, "s1 scaled value incorrect");
+        assert!(
+            (s1_scaled.value - (-1.2247)).abs() < 0.01,
+            "s1 scaled value incorrect"
+        );
         assert!(s2_scaled.value.abs() < 0.01, "s2 scaled value incorrect");
-        assert!((s3_scaled.value - 1.2247).abs() < 0.01, "s3 scaled value incorrect");
+        assert!(
+            (s3_scaled.value - 1.2247).abs() < 0.01,
+            "s3 scaled value incorrect"
+        );
     }
 
     #[test]
@@ -473,13 +488,11 @@ mod tests {
 
     #[test]
     fn test_get_stats_missing_label() {
-        let records = vec![
-            PgsRecord {
-                sample_id: "s1".to_string(),
-                label: "Height".to_string(),
-                value: 1.0,
-            },
-        ];
+        let records = vec![PgsRecord {
+            sample_id: "s1".to_string(),
+            label: "Height".to_string(),
+            value: 1.0,
+        }];
 
         let stats = PgsParser::get_stats(&records, "BMI");
         assert!(stats.is_none(), "Should return None for missing label");
@@ -488,13 +501,11 @@ mod tests {
     #[test]
     fn test_single_value_per_label() {
         // Edge case: only one value for a label
-        let records = vec![
-            PgsRecord {
-                sample_id: "s1".to_string(),
-                label: "Rare".to_string(),
-                value: 42.0,
-            },
-        ];
+        let records = vec![PgsRecord {
+            sample_id: "s1".to_string(),
+            label: "Rare".to_string(),
+            value: 42.0,
+        }];
 
         let scaled = PgsParser::scale_pgs(&records);
 

@@ -37,7 +37,9 @@ use uuid::Uuid;
 /// it does connect.
 async fn connect() -> Option<PgPool> {
     let Ok(url) = std::env::var("TEST_DATABASE_URL") else {
-        eprintln!("SKIPPED: TEST_DATABASE_URL not set - see api-gateway/tests/rls_enforcement.rs header for how to run this test");
+        eprintln!(
+            "SKIPPED: TEST_DATABASE_URL not set - see api-gateway/tests/rls_enforcement.rs header for how to run this test"
+        );
         return None;
     };
     Some(
@@ -75,16 +77,23 @@ async fn insert_job_as(pool: &PgPool, user_id: &str) -> Uuid {
 async fn app_connection_is_not_superuser_and_does_not_bypass_rls() {
     let Some(pool) = connect().await else { return };
 
-    let row = sqlx::query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
-        .fetch_one(&pool)
-        .await
-        .expect("query pg_roles for current_user");
+    let row =
+        sqlx::query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&pool)
+            .await
+            .expect("query pg_roles for current_user");
 
     let rolsuper: bool = row.get("rolsuper");
     let rolbypassrls: bool = row.get("rolbypassrls");
 
-    assert!(!rolsuper, "genetics_app must not be a superuser (found rolsuper=true - is TEST_DATABASE_URL pointed at genetics_owner instead?)");
-    assert!(!rolbypassrls, "genetics_app must not have BYPASSRLS (found rolbypassrls=true)");
+    assert!(
+        !rolsuper,
+        "genetics_app must not be a superuser (found rolsuper=true - is TEST_DATABASE_URL pointed at genetics_owner instead?)"
+    );
+    assert!(
+        !rolbypassrls,
+        "genetics_app must not have BYPASSRLS (found rolbypassrls=true)"
+    );
 }
 
 /// Acceptance criterion #3: FORCE ROW LEVEL SECURITY is actually set.
@@ -100,7 +109,10 @@ async fn genetics_jobs_has_force_row_level_security() {
     .expect("query pg_class for genetics_jobs");
 
     let forced: bool = row.get("relforcerowsecurity");
-    assert!(forced, "genetics_jobs must have FORCE ROW LEVEL SECURITY set");
+    assert!(
+        forced,
+        "genetics_jobs must have FORCE ROW LEVEL SECURITY set"
+    );
 }
 
 /// Acceptance criterion #1 (core enforcement test): insert jobs for two
@@ -126,14 +138,19 @@ async fn rls_isolates_rows_by_current_user_id_and_denies_by_default() {
             .await
             .expect("set RLS context to A");
 
-        let rows: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM genetics_jobs WHERE id IN ($1, $2)")
-            .bind(job_a)
-            .bind(job_b)
-            .fetch_all(&mut *tx)
-            .await
-            .expect("select as A");
+        let rows: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM genetics_jobs WHERE id IN ($1, $2)")
+                .bind(job_a)
+                .bind(job_b)
+                .fetch_all(&mut *tx)
+                .await
+                .expect("select as A");
 
-        assert_eq!(rows, vec![job_a], "user A's context must see exactly A's job, not B's");
+        assert_eq!(
+            rows,
+            vec![job_a],
+            "user A's context must see exactly A's job, not B's"
+        );
         tx.commit().await.expect("commit");
     }
 
@@ -142,14 +159,19 @@ async fn rls_isolates_rows_by_current_user_id_and_denies_by_default() {
     // - current_setting(..., TRUE) is NULL, and NULL never equals a
     // user_id, so USING matches no rows.
     {
-        let rows: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM genetics_jobs WHERE id IN ($1, $2)")
-            .bind(job_a)
-            .bind(job_b)
-            .fetch_all(&pool)
-            .await
-            .expect("select with no RLS context set");
+        let rows: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM genetics_jobs WHERE id IN ($1, $2)")
+                .bind(job_a)
+                .bind(job_b)
+                .fetch_all(&pool)
+                .await
+                .expect("select with no RLS context set");
 
-        assert!(rows.is_empty(), "a connection with no app.current_user_id set must see zero rows, saw {:?}", rows);
+        assert!(
+            rows.is_empty(),
+            "a connection with no app.current_user_id set must see zero rows, saw {:?}",
+            rows
+        );
     }
 
     // Cleanup: each delete needs its own owner's context, same as the app does.

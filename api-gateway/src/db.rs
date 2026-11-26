@@ -66,13 +66,12 @@ pub async fn scoped_tx_for_token(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to start transaction: {}", e)))?;
 
-    let resolved: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, user_id FROM genetics.resolve_job_owner_by_token($1)",
-    )
-    .bind(token)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| AppError::Internal(format!("Failed to resolve job owner: {}", e)))?;
+    let resolved: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT id, user_id FROM genetics.resolve_job_owner_by_token($1)")
+            .bind(token)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to resolve job owner: {}", e)))?;
 
     let (job_id, owner) = resolved.ok_or(AppError::NotFound)?;
 

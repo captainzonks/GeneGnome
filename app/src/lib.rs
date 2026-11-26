@@ -8,12 +8,12 @@
 // Version: 1.1.0
 // ==============================================================================
 
-pub mod parsers;
 pub mod audit;
-pub mod validator;
-pub mod secure_delete;
 pub mod genotype_converter;
 pub mod models;
-pub mod reference_panel;
-pub mod processor;
 pub mod output;
+pub mod parsers;
+pub mod processor;
+pub mod reference_panel;
+pub mod secure_delete;
+pub mod validator;

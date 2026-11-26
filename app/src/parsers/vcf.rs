@@ -9,7 +9,7 @@
 // ==============================================================================
 // References:
 // - VCF 4.2 Spec: https://samtools.github.io/hts-specs/VCFv4.2.pdf
-// - noodles-vcf: https://docs.rs/noodles-vcf/0.81.0/noodles_vcf/
+// - noodles-vcf: https://docs.rs/noodles-vcf/0.97.0/noodles_vcf/
 // ==============================================================================
 
 use noodles_vcf as vcf;
@@ -91,8 +91,8 @@ pub struct VCFParser {
 impl Default for VCFParser {
     fn default() -> Self {
         Self {
-            min_quality: 0.0,  // Accept all by default
-            max_errors: 1000,  // Fail if >1000 bad records
+            min_quality: 0.0, // Accept all by default
+            max_errors: 1000, // Fail if >1000 bad records
             skipped_count: 0,
             error_count: 0,
         }
@@ -147,7 +147,7 @@ impl VCFParser {
             .map_err(|e| VCFParseError::FileOpenError(format!("{}: {}", path.display(), e)))?;
 
         // Read header
-        let header = reader
+        reader
             .read_header()
             .map_err(|e| VCFParseError::HeaderError(format!("{}", e)))?;
 
@@ -159,29 +159,35 @@ impl VCFParser {
         for (line_num, result) in reader.records().enumerate() {
             match result {
                 Ok(record) => {
-                    match self.parse_record(&record, &header) {
+                    match self.parse_record(&record) {
                         Ok(Some(vcf_record)) => vcf_records.push(vcf_record),
-                        Ok(None) => self.skipped_count += 1,  // Filtered by quality
+                        Ok(None) => self.skipped_count += 1, // Filtered by quality
                         Err(e) => {
                             eprintln!("Warning: Line {}: {}", line_num + 1, e);
                             self.error_count += 1;
 
                             if self.error_count > self.max_errors {
-                                return Err(VCFParseError::RecordError(
-                                    format!("Too many errors ({} > {})", self.error_count, self.max_errors)
-                                ));
+                                return Err(VCFParseError::RecordError(format!(
+                                    "Too many errors ({} > {})",
+                                    self.error_count, self.max_errors
+                                )));
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Line {}: Failed to read record: {}", line_num + 1, e);
+                    eprintln!(
+                        "Warning: Line {}: Failed to read record: {}",
+                        line_num + 1,
+                        e
+                    );
                     self.error_count += 1;
 
                     if self.error_count > self.max_errors {
-                        return Err(VCFParseError::RecordError(
-                            format!("Too many errors ({} > {})", self.error_count, self.max_errors)
-                        ));
+                        return Err(VCFParseError::RecordError(format!(
+                            "Too many errors ({} > {})",
+                            self.error_count, self.max_errors
+                        )));
                     }
                 }
             }
@@ -196,19 +202,20 @@ impl VCFParser {
     /// - Ok(Some(record)) if successfully parsed and passes quality filter
     /// - Ok(None) if filtered by quality threshold
     /// - Err if parsing failed
-    fn parse_record(
-        &self,
-        record: &vcf::Record,
-        header: &vcf::Header,
-    ) -> Result<Option<VCFRecord>, VCFParseError> {
+    fn parse_record(&self, record: &vcf::Record) -> Result<Option<VCFRecord>, VCFParseError> {
         // Extract chromosome
         let chrom_str = record.reference_sequence_name();
         let chromosome = self.parse_chromosome(chrom_str)?;
 
         // Extract position
         let position = match record.variant_start() {
-            Some(Ok(pos)) => usize::from(pos.get()) as u64,
-            Some(Err(e)) => return Err(VCFParseError::RecordError(format!("Failed to get position: {}", e))),
+            Some(Ok(pos)) => pos.get() as u64,
+            Some(Err(e)) => {
+                return Err(VCFParseError::RecordError(format!(
+                    "Failed to get position: {}",
+                    e
+                )));
+            }
             None => return Err(VCFParseError::MissingField("Position".to_string())),
         };
 
@@ -223,13 +230,18 @@ impl VCFParser {
         let alt_allele = if alt_alleles.is_empty() {
             return Err(VCFParseError::MissingField("ALT allele".to_string()));
         } else {
-            alt_alleles.iter().next().unwrap()
-                .map_err(|e| VCFParseError::RecordError(format!("Failed to get ALT allele: {}", e)))?
+            alt_alleles
+                .iter()
+                .next()
+                .unwrap()
+                .map_err(|e| {
+                    VCFParseError::RecordError(format!("Failed to get ALT allele: {}", e))
+                })?
                 .to_string()
         };
 
         // Extract dosage (DS field from FORMAT column)
-        let dosage = self.extract_dosage(record, header)?;
+        let dosage = self.extract_dosage(record)?;
 
         // Validate dosage range
         if !(0.0..=2.0).contains(&dosage) {
@@ -237,13 +249,13 @@ impl VCFParser {
         }
 
         // Extract imputation quality (R2 from INFO)
-        let imputation_quality = self.extract_dr2(record, header);
+        let imputation_quality = self.extract_r2(record);
 
         // Apply quality filter
-        if let Some(quality) = imputation_quality {
-            if quality < self.min_quality {
-                return Ok(None);  // Skip low-quality SNPs
-            }
+        if let Some(quality) = imputation_quality
+            && quality < self.min_quality
+        {
+            return Ok(None); // Skip low-quality SNPs
         }
 
         Ok(Some(VCFRecord {
@@ -270,7 +282,8 @@ impl VCFParser {
                     Ok(n)
                 } else {
                     Err(VCFParseError::InvalidChromosome(format!(
-                        "{} (must be 1-22)", chrom
+                        "{} (must be 1-22)",
+                        chrom
                     )))
                 }
             })
@@ -299,89 +312,44 @@ impl VCFParser {
         }
     }
 
-    /// Extract dosage (DS) field from FORMAT column
+    /// Extract the dosage (DS) value of the last sample column
     ///
-    /// Parses the raw VCF line to extract DS value from last sample
-    /// Uses Debug format to access samples string from noodles Record
-    fn extract_dosage(&self, record: &vcf::Record, _header: &vcf::Header) -> Result<f64, VCFParseError> {
-        let record_str = format!("{:?}", record);
+    /// Reads the raw column text so the value parses straight to `f64`.
+    fn extract_dosage(&self, record: &vcf::Record) -> Result<f64, VCFParseError> {
+        let samples = record.samples();
 
-        // Find the samples field: samples: Samples("...")
-        let samples_prefix = "samples: Samples(\"";
-        let start_idx = record_str.find(samples_prefix)
-            .ok_or_else(|| VCFParseError::RecordError("Samples field not found in debug output".to_string()))?
-            + samples_prefix.len();
-
-        // Find the closing quote
-        let end_idx = record_str[start_idx..].find("\")")
-            .ok_or_else(|| VCFParseError::RecordError("Samples field end not found".to_string()))?
-            + start_idx;
-
-        // Extract samples string (FORMAT + all sample data, tab-separated)
-        let samples_str = &record_str[start_idx..end_idx];
-
-        // Split by tabs (in debug format they're literal \t, not escaped)
-        let fields: Vec<&str> = samples_str.split("\\t").collect();
-
-        if fields.is_empty() {
-            return Err(VCFParseError::MissingField("No sample data found".to_string()));
-        }
-
-        // First field is FORMAT
-        let format = fields[0];
-
-        // Find DS position in FORMAT
-        let format_keys: Vec<&str> = format.split(':').collect();
-        let ds_index = format_keys.iter().position(|&k| k == "DS")
+        let ds_index = samples
+            .keys()
+            .iter()
+            .position(|key| key == "DS")
             .ok_or_else(|| VCFParseError::MissingField("DS not found in FORMAT".to_string()))?;
 
-        // Last sample is at the end (fields[0] is FORMAT, fields[1..] are samples)
-        if fields.len() < 2 {
-            return Err(VCFParseError::MissingField("No sample columns found".to_string()));
-        }
-        let last_sample = fields[fields.len() - 1];
+        let last_sample = samples
+            .iter()
+            .last()
+            .ok_or_else(|| VCFParseError::MissingField("No sample columns found".to_string()))?;
 
-        // Extract DS value from sample
-        let sample_values: Vec<&str> = last_sample.split(':').collect();
+        let ds_str = last_sample
+            .as_ref()
+            .split(':')
+            .nth(ds_index)
+            .ok_or_else(|| VCFParseError::MissingField("DS index out of bounds".to_string()))?;
 
-        if ds_index >= sample_values.len() {
-            return Err(VCFParseError::MissingField("DS index out of bounds".to_string()));
-        }
-
-        let ds_str = sample_values[ds_index];
-
-        // Parse as float
-        ds_str.parse::<f64>()
-            .map_err(|e| VCFParseError::RecordError(format!("Failed to parse DS '{}' as f64: {}", ds_str, e)))
+        ds_str.parse::<f64>().map_err(|e| {
+            VCFParseError::RecordError(format!("Failed to parse DS '{}' as f64: {}", ds_str, e))
+        })
     }
 
     /// Extract R2 (imputation quality) from INFO field
     ///
     /// Michigan Imputation Server uses "R2" (not "DR2") for imputation quality
-    fn extract_dr2(&self, record: &vcf::Record, _header: &vcf::Header) -> Option<f64> {
-        let record_str = format!("{:?}", record);
-
-        // Find the info field: info: Info("...")
-        let info_prefix = "info: Info(\"";
-        let start_idx = record_str.find(info_prefix)? + info_prefix.len();
-
-        // Find the closing quote
-        let end_idx = record_str[start_idx..].find("\")")? + start_idx;
-
-        // Extract INFO string
-        let info = &record_str[start_idx..end_idx];
-
-        // Split INFO field by semicolons
-        for field in info.split(';') {
-            if field.starts_with("R2=") {
-                let r2_str = &field[3..];  // Skip "R2="
-                if let Ok(r2) = r2_str.parse::<f64>() {
-                    return Some(r2);
-                }
-            }
-        }
-
-        None
+    fn extract_r2(&self, record: &vcf::Record) -> Option<f64> {
+        record
+            .info()
+            .as_ref()
+            .split(';')
+            .filter_map(|field| field.strip_prefix("R2="))
+            .find_map(|value| value.parse::<f64>().ok())
     }
 }
 
@@ -405,27 +373,64 @@ mod tests {
 
     #[test]
     fn test_dosage_validation() {
-        let parser = VCFParser::new();
+        let _parser = VCFParser::new();
 
         // Valid dosages
-        assert!(VCFRecord {
-            rsid: "rs1".to_string(),
-            chromosome: 1,
-            position: 100,
-            ref_allele: "A".to_string(),
-            alt_allele: "G".to_string(),
-            dosage: 0.0,
-            imputation_quality: None,
-        }.dosage >= 0.0);
+        assert!(
+            VCFRecord {
+                rsid: "rs1".to_string(),
+                chromosome: 1,
+                position: 100,
+                ref_allele: "A".to_string(),
+                alt_allele: "G".to_string(),
+                dosage: 0.0,
+                imputation_quality: None,
+            }
+            .dosage
+                >= 0.0
+        );
 
-        assert!(VCFRecord {
-            rsid: "rs2".to_string(),
-            chromosome: 1,
-            position: 200,
-            ref_allele: "A".to_string(),
-            alt_allele: "G".to_string(),
-            dosage: 2.0,
-            imputation_quality: None,
-        }.dosage <= 2.0);
+        assert!(
+            VCFRecord {
+                rsid: "rs2".to_string(),
+                chromosome: 1,
+                position: 200,
+                ref_allele: "A".to_string(),
+                alt_allele: "G".to_string(),
+                dosage: 2.0,
+                imputation_quality: None,
+            }
+            .dosage
+                <= 2.0
+        );
+    }
+
+    /// Dosage and quality must come from the record itself. Two samples, so the
+    /// "last sample wins" rule is covered too.
+    #[test]
+    fn parse_reads_dosage_and_r2_from_records() {
+        let lines = [
+            "##fileformat=VCFv4.2",
+            "##INFO=<ID=R2,Number=1,Type=Float,Description=\"Imputation quality\">",
+            "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
+            "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">",
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tFIRST\tLAST",
+            "1\t1000\trs1\tA\tG\t.\tPASS\tAF=0.5;R2=0.987\tGT:DS\t0|0:0.001\t0|1:1.234",
+            "chr2\t2000\t.\tC\tT\t.\tPASS\t.\tGT:DS\t0|0:0\t1|1:2",
+        ];
+        let mut file = tempfile::Builder::new().suffix(".vcf").tempfile().unwrap();
+        std::io::Write::write_all(&mut file, (lines.join("\n") + "\n").as_bytes()).unwrap();
+
+        let mut parser = VCFParser::new();
+        let records = parser.parse(file.path()).unwrap();
+
+        assert_eq!(parser.error_count, 0);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].rsid, "rs1");
+        assert_eq!(records[0].dosage, 1.234);
+        assert_eq!(records[0].imputation_quality, Some(0.987));
+        assert_eq!(records[1].rsid, "chr2:2000:C:T");
+        assert_eq!(records[1].dosage, 2.0);
+        assert_eq!(records[1].imputation_quality, None);
     }
 }

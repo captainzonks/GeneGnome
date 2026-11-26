@@ -12,13 +12,12 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use redis::Client as RedisClient;
 use redis::aio::ConnectionManager;
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use std::fs::File;
-use std::io::{BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{error, info, warn, Level};
+use tracing::{Level, error, info, warn};
 use uuid::Uuid;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
@@ -31,7 +30,7 @@ mod security;
 use email::{EmailConfig, EmailSender};
 use job_processor::JobProcessor;
 use queue::{JobPayload, JobQueue};
-use security::{generate_download_token, generate_download_password, hash_password};
+use security::{generate_download_password, generate_download_token, hash_password};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,8 +47,7 @@ async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
 
     // Initialize database connection
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL must be set")?;
+    let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
 
     let db_pool = PgPoolOptions::new()
         .max_connections(5)
@@ -60,27 +58,27 @@ async fn main() -> Result<()> {
     info!("Connected to PostgreSQL");
 
     // Initialize Redis connection
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
-    let redis_client = RedisClient::open(redis_url)
-        .context("Failed to create Redis client")?;
+    let redis_client = RedisClient::open(redis_url).context("Failed to create Redis client")?;
 
     // Create async connection manager
-    let redis_conn = ConnectionManager::new(redis_client)
-        .await
-        .context("Failed to create Redis connection manager")?;
+    let redis_conn = queue::connect(redis_client).await?;
 
     info!("Connected to Redis");
 
     // Get encrypted volume path
     let encrypted_volume_path = PathBuf::from(
         std::env::var("ENCRYPTED_VOLUME_PATH")
-            .unwrap_or_else(|_| "/mnt/genetics-encrypted".to_string())
+            .unwrap_or_else(|_| "/mnt/genetics-encrypted".to_string()),
     );
 
     if !encrypted_volume_path.exists() {
-        error!("Encrypted volume not mounted at {:?}", encrypted_volume_path);
+        error!(
+            "Encrypted volume not mounted at {:?}",
+            encrypted_volume_path
+        );
         return Err(anyhow::anyhow!("Encrypted volume not accessible"));
     }
 
@@ -90,14 +88,25 @@ async fn main() -> Result<()> {
     let reference_panel_path = encrypted_volume_path.join("reference_panel.db");
 
     if !reference_panel_path.exists() {
-        error!("Reference panel database not found at {:?}", reference_panel_path);
+        error!(
+            "Reference panel database not found at {:?}",
+            reference_panel_path
+        );
         return Err(anyhow::anyhow!("Reference panel database not accessible"));
     }
 
-    info!("Reference panel database accessible at {:?}", reference_panel_path);
+    info!(
+        "Reference panel database accessible at {:?}",
+        reference_panel_path
+    );
 
     // Create worker instance
-    let worker = Worker::new(db_pool, redis_conn, encrypted_volume_path, reference_panel_path);
+    let worker = Worker::new(
+        db_pool,
+        redis_conn,
+        encrypted_volume_path,
+        reference_panel_path,
+    );
 
     // Recover stuck jobs from previous worker instance
     info!("Checking for stuck jobs from previous worker instance...");
@@ -125,7 +134,10 @@ fn validate_upload_session_id(id: &str) -> Result<()> {
         anyhow::bail!("Invalid upload_session_id length");
     }
 
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
         anyhow::bail!("upload_session_id contains invalid characters");
     }
 
@@ -142,7 +154,12 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(db_pool: PgPool, redis_conn: ConnectionManager, encrypted_volume_path: PathBuf, reference_panel_path: PathBuf) -> Self {
+    fn new(
+        db_pool: PgPool,
+        redis_conn: ConnectionManager,
+        encrypted_volume_path: PathBuf,
+        reference_panel_path: PathBuf,
+    ) -> Self {
         Self {
             db_pool,
             redis_conn,
@@ -187,8 +204,20 @@ impl Worker {
         info!("Processing job {}", job_id);
 
         // Update job status to processing
-        self.update_job_status(job_id, &payload.user_id, "processing", None, None, None, None, None, None).await?;
-        self.publish_progress(job_id, 0.0, "Starting processing").await?;
+        self.update_job_status(
+            job_id,
+            &payload.user_id,
+            "processing",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
+        self.publish_progress(job_id, 0.0, "Starting processing")
+            .await?;
 
         // Phase 7.1: Reassemble chunks if this is a chunked upload
         let upload_dir = PathBuf::from(&payload.upload_dir);
@@ -198,15 +227,23 @@ impl Worker {
                     .context("Invalid upload_session_id in job payload")?;
 
                 info!("Reassembling chunked upload for job {}", job_id);
-                self.publish_progress(job_id, 0.0, "Assembling uploaded files").await?;
+                self.publish_progress(job_id, 0.0, "Assembling uploaded files")
+                    .await?;
 
-                let chunks_dir = self.encrypted_volume_path.join("uploads").join("chunks").join(upload_session_id);
-                self.reassemble_chunks(&chunks_dir, &upload_dir, job_id).await
+                let chunks_dir = self
+                    .encrypted_volume_path
+                    .join("uploads")
+                    .join("chunks")
+                    .join(upload_session_id);
+                self.reassemble_chunks(&chunks_dir, &upload_dir, job_id)
+                    .await
                     .context("Failed to reassemble chunks")?;
 
                 info!("Chunk reassembly complete for job {}", job_id);
             } else {
-                return Err(anyhow::anyhow!("Chunked upload specified but no upload_session_id provided"));
+                return Err(anyhow::anyhow!(
+                    "Chunked upload specified but no upload_session_id provided"
+                ));
             }
         }
 
@@ -222,7 +259,10 @@ impl Worker {
         );
 
         // Execute processing
-        match processor.process(&payload.output_formats, payload.quality_threshold).await {
+        match processor
+            .process(&payload.output_formats, payload.quality_threshold)
+            .await
+        {
             Ok(viz_summary) => {
                 info!("Job {} completed successfully", job_id);
                 let completed_at = Utc::now();
@@ -230,27 +270,30 @@ impl Worker {
 
                 // Phase 7.2: Create ZIP archive of results
                 let output_dir = PathBuf::from(&payload.output_dir);
-                let zip_path = self.create_results_zip(&output_dir, job_id).await
+                let zip_path = self
+                    .create_results_zip(&output_dir, job_id)
+                    .await
                     .context("Failed to create results ZIP archive")?;
                 info!("Created results ZIP: {:?}", zip_path);
 
                 // Phase 4: Generate download token and password
                 let (token, password, password_hash) = if payload.user_email.is_some() {
                     match (generate_download_token(), generate_download_password()) {
-                        (Ok(token), Ok(password)) => {
-                            match hash_password(&password) {
-                                Ok(hash) => {
-                                    info!("Generated download credentials for job {}", job_id);
-                                    (Some(token), Some(password), Some(hash))
-                                }
-                                Err(e) => {
-                                    warn!("Failed to hash password for job {}: {}", job_id, e);
-                                    (None, None, None)
-                                }
+                        (Ok(token), Ok(password)) => match hash_password(&password) {
+                            Ok(hash) => {
+                                info!("Generated download credentials for job {}", job_id);
+                                (Some(token), Some(password), Some(hash))
                             }
-                        }
+                            Err(e) => {
+                                warn!("Failed to hash password for job {}: {}", job_id, e);
+                                (None, None, None)
+                            }
+                        },
                         (Err(e1), Err(e2)) => {
-                            warn!("Failed to generate credentials for job {}: token={}, password={}", job_id, e1, e2);
+                            warn!(
+                                "Failed to generate credentials for job {}: token={}, password={}",
+                                job_id, e1, e2
+                            );
                             (None, None, None)
                         }
                         (Err(e), _) => {
@@ -278,12 +321,15 @@ impl Worker {
                     password_hash.as_deref(),
                     Some(zip_path_str),
                     Some(&viz_summary),
-                ).await?;
+                )
+                .await?;
 
                 // Phase 5: Send email notification
-                if let (Some(user_email), Some(token_str), Some(password_str)) =
-                    (payload.user_email.as_ref(), token.as_ref(), password.as_ref())
-                {
+                if let (Some(user_email), Some(token_str), Some(password_str)) = (
+                    payload.user_email.as_ref(),
+                    token.as_ref(),
+                    password.as_ref(),
+                ) {
                     // Load email configuration
                     match EmailConfig::from_env() {
                         Ok(email_config) => {
@@ -301,10 +347,18 @@ impl Worker {
                                     info!("Email notification sent for job {}", job_id);
 
                                     // Update emailed_at timestamp (with RLS context)
-                                    let mut tx = match db::scoped_tx_for_user(&self.db_pool, &payload.user_id).await {
+                                    let mut tx = match db::scoped_tx_for_user(
+                                        &self.db_pool,
+                                        &payload.user_id,
+                                    )
+                                    .await
+                                    {
                                         Ok(tx) => tx,
                                         Err(e) => {
-                                            warn!("Failed to open RLS-scoped transaction for emailed_at update: {}", e);
+                                            warn!(
+                                                "Failed to open RLS-scoped transaction for emailed_at update: {}",
+                                                e
+                                            );
                                             return Ok(());
                                         }
                                     };
@@ -335,13 +389,26 @@ impl Worker {
                     }
                 }
 
-                self.publish_progress(job_id, 100.0, "Processing complete").await?;
+                self.publish_progress(job_id, 100.0, "Processing complete")
+                    .await?;
             }
             Err(e) => {
                 error!("Job {} failed: {}", job_id, e);
                 let error_msg = format!("{:#}", e);
-                self.update_job_status(job_id, &payload.user_id, "failed", Some(&error_msg), None, None, None, None, None).await?;
-                self.publish_progress(job_id, 0.0, &format!("Failed: {}", error_msg)).await?;
+                self.update_job_status(
+                    job_id,
+                    &payload.user_id,
+                    "failed",
+                    Some(&error_msg),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+                self.publish_progress(job_id, 0.0, &format!("Failed: {}", error_msg))
+                    .await?;
             }
         }
 
@@ -349,6 +416,8 @@ impl Worker {
     }
 
     /// Update job status in database (with RLS context)
+    // Each argument maps to one job column.
+    #[allow(clippy::too_many_arguments)]
     async fn update_job_status(
         &self,
         job_id: Uuid,
@@ -370,7 +439,7 @@ impl Worker {
 
         if status == "processing" {
             sqlx::query(
-                "UPDATE genetics.genetics_jobs SET status = $1, started_at = $2 WHERE id = $3"
+                "UPDATE genetics.genetics_jobs SET status = $1, started_at = $2 WHERE id = $3",
             )
             .bind(status)
             .bind(now)
@@ -395,7 +464,7 @@ impl Worker {
                      download_password_hash = $5,
                      result_path = $6,
                      metadata = COALESCE(metadata, '{}'::jsonb) || $8::jsonb
-                 WHERE id = $7"
+                 WHERE id = $7",
             )
             .bind(status)
             .bind(now)
@@ -421,7 +490,8 @@ impl Worker {
             .context("Failed to update job status to failed")?;
         }
 
-        tx.commit().await
+        tx.commit()
+            .await
             .context("Failed to commit job status update")?;
 
         Ok(())
@@ -438,36 +508,37 @@ impl Worker {
             "timestamp": Utc::now().to_rfc3339(),
         });
 
-        job_queue.publish_progress(job_id, &progress_msg.to_string()).await?;
+        job_queue
+            .publish_progress(job_id, &progress_msg.to_string())
+            .await?;
 
         Ok(())
     }
 
     /// Create ZIP archive of all result files in output directory
     /// Uses STORE method (no compression) since files are already compressed
-    async fn create_results_zip(&self, output_dir: &PathBuf, job_id: Uuid) -> Result<PathBuf> {
+    async fn create_results_zip(&self, output_dir: &Path, job_id: Uuid) -> Result<PathBuf> {
         let zip_filename = format!("results_{}.zip", job_id);
         let zip_path = output_dir.join(&zip_filename);
 
         info!("Creating ZIP archive: {:?}", zip_path);
 
         // Use blocking task for synchronous ZIP operations
-        let output_dir_clone = output_dir.clone();
+        let output_dir_clone = output_dir.to_path_buf();
         let zip_path_clone = zip_path.clone();
 
         tokio::task::spawn_blocking(move || {
-            let zip_file = File::create(&zip_path_clone)
-                .context("Failed to create ZIP file")?;
+            let zip_file = File::create(&zip_path_clone).context("Failed to create ZIP file")?;
 
             let mut zip = ZipWriter::new(zip_file);
 
             // Use STORE method (no compression) since files are already compressed (.gz, .parquet)
-            let options = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
             // Read all files in the output directory
-            let entries = std::fs::read_dir(&output_dir_clone)
-                .context("Failed to read output directory")?;
+            let entries =
+                std::fs::read_dir(&output_dir_clone).context("Failed to read output directory")?;
 
             let mut file_count = 0;
             for entry in entries {
@@ -476,7 +547,8 @@ impl Worker {
 
                 // Skip the ZIP file itself and directories
                 if path.is_file() && path != zip_path_clone {
-                    let filename = path.file_name()
+                    let filename = path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .context("Invalid filename")?;
 
@@ -485,11 +557,9 @@ impl Worker {
                     zip.start_file(filename, options)
                         .context("Failed to start ZIP file entry")?;
 
-                    let mut file = File::open(&path)
-                        .context("Failed to open result file")?;
+                    let mut file = File::open(&path).context("Failed to open result file")?;
 
-                    std::io::copy(&mut file, &mut zip)
-                        .context("Failed to copy file to ZIP")?;
+                    std::io::copy(&mut file, &mut zip).context("Failed to copy file to ZIP")?;
 
                     file_count += 1;
                 }
@@ -517,13 +587,12 @@ impl Worker {
         // SECURITY DEFINER function (bypasses RLS as genetics_owner) that
         // returns only id/user_id - see
         // database/migrations/004_separate_runtime_role_from_owner.sql.
-        let stuck_jobs: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT * FROM genetics.list_stuck_jobs($1)"
-        )
-        .bind(cutoff)
-        .fetch_all(&self.db_pool)
-        .await
-        .context("Failed to query stuck jobs")?;
+        let stuck_jobs: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT * FROM genetics.list_stuck_jobs($1)")
+                .bind(cutoff)
+                .fetch_all(&self.db_pool)
+                .await
+                .context("Failed to query stuck jobs")?;
 
         if stuck_jobs.is_empty() {
             info!("No stuck jobs found");
@@ -533,11 +602,25 @@ impl Worker {
         info!("Found {} stuck job(s), marking as failed", stuck_jobs.len());
 
         for (job_id, user_id) in stuck_jobs {
-            warn!("Marking stuck job as failed: {} (user: {})", job_id, user_id);
+            warn!(
+                "Marking stuck job as failed: {} (user: {})",
+                job_id, user_id
+            );
 
             // Mark job as failed with explanation
             let error_msg = "Job interrupted by worker restart. Please resubmit your data.";
-            self.update_job_status(job_id, &user_id, "failed", Some(error_msg), None, None, None, None, None).await?;
+            self.update_job_status(
+                job_id,
+                &user_id,
+                "failed",
+                Some(error_msg),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
             self.publish_progress(job_id, 0.0, error_msg).await?;
         }
 
@@ -565,20 +648,25 @@ impl Worker {
         // Legitimate cross-user read, same reasoning as recover_stuck_jobs
         // above: genetics.list_jobs_for_cleanup is the SECURITY DEFINER
         // equivalent for this sweep.
-        let old_jobs: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT * FROM genetics.list_jobs_for_cleanup($1)"
-        )
-        .bind(cutoff)
-        .fetch_all(&self.db_pool)
-        .await
-        .context("Failed to query old jobs")?;
+        let old_jobs: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT * FROM genetics.list_jobs_for_cleanup($1)")
+                .bind(cutoff)
+                .fetch_all(&self.db_pool)
+                .await
+                .context("Failed to query old jobs")?;
 
         for (job_id, user_id) in old_jobs {
             info!("Cleaning up old job: {} (user: {})", job_id, user_id);
 
             // Delete files from encrypted volume
-            let upload_dir = self.encrypted_volume_path.join("uploads").join(job_id.to_string());
-            let results_dir = self.encrypted_volume_path.join("results").join(job_id.to_string());
+            let upload_dir = self
+                .encrypted_volume_path
+                .join("uploads")
+                .join(job_id.to_string());
+            let results_dir = self
+                .encrypted_volume_path
+                .join("results")
+                .join(job_id.to_string());
 
             if upload_dir.exists() {
                 // TODO: Use secure_delete from genetics-processor
@@ -599,7 +687,10 @@ impl Worker {
             let mut tx = match db::scoped_tx_for_user(&self.db_pool, &user_id).await {
                 Ok(tx) => tx,
                 Err(e) => {
-                    error!("Failed to open RLS-scoped transaction for job {}: {}", job_id, e);
+                    error!(
+                        "Failed to open RLS-scoped transaction for job {}: {}",
+                        job_id, e
+                    );
                     continue;
                 }
             };
@@ -631,23 +722,29 @@ impl Worker {
     async fn reassemble_chunks(
         &self,
         chunks_dir: &PathBuf,
-        target_dir: &PathBuf,
+        target_dir: &Path,
         job_id: Uuid,
     ) -> Result<()> {
         use tokio::io::AsyncWriteExt;
 
         if !chunks_dir.exists() {
-            return Err(anyhow::anyhow!("Chunks directory not found: {:?}", chunks_dir));
+            return Err(anyhow::anyhow!(
+                "Chunks directory not found: {:?}",
+                chunks_dir
+            ));
         }
 
         // Get all chunk files and group by original filename
-        let mut entries = tokio::fs::read_dir(chunks_dir).await
+        let mut entries = tokio::fs::read_dir(chunks_dir)
+            .await
             .context("Failed to read chunks directory")?;
 
         let mut chunks_by_file: std::collections::HashMap<String, Vec<(usize, PathBuf)>> =
             std::collections::HashMap::new();
 
-        while let Some(entry) = entries.next_entry().await
+        while let Some(entry) = entries
+            .next_entry()
+            .await
             .context("Failed to read directory entry")?
         {
             let path = entry.path();
@@ -659,14 +756,19 @@ impl Worker {
                 let chunk_index_str = &filename[last_underscore + 1..];
 
                 if let Ok(chunk_index) = chunk_index_str.parse::<usize>() {
-                    chunks_by_file.entry(original_name.to_string())
-                        .or_insert_with(Vec::new)
+                    chunks_by_file
+                        .entry(original_name.to_string())
+                        .or_default()
                         .push((chunk_index, path));
                 }
             }
         }
 
-        info!("Found {} files to reassemble for job {}", chunks_by_file.len(), job_id);
+        info!(
+            "Found {} files to reassemble for job {}",
+            chunks_by_file.len(),
+            job_id
+        );
 
         // Reassemble each file
         for (original_filename, mut chunks) in chunks_by_file {
@@ -675,28 +777,38 @@ impl Worker {
 
             // Create reassembled file
             let output_path = target_dir.join(&original_filename);
-            let mut output_file = tokio::fs::File::create(&output_path).await
+            let mut output_file = tokio::fs::File::create(&output_path)
+                .await
                 .context(format!("Failed to create output file: {:?}", output_path))?;
 
             // Write chunks in order
             for (chunk_index, chunk_path) in chunks {
-                let chunk_data = tokio::fs::read(&chunk_path).await
+                let chunk_data = tokio::fs::read(&chunk_path)
+                    .await
                     .context(format!("Failed to read chunk: {:?}", chunk_path))?;
 
-                output_file.write_all(&chunk_data).await
+                output_file
+                    .write_all(&chunk_data)
+                    .await
                     .context(format!("Failed to write to output file: {:?}", output_path))?;
 
-                info!("Reassembled chunk {} for file {}", chunk_index, original_filename);
+                info!(
+                    "Reassembled chunk {} for file {}",
+                    chunk_index, original_filename
+                );
             }
 
-            output_file.flush().await
+            output_file
+                .flush()
+                .await
                 .context(format!("Failed to flush output file: {:?}", output_path))?;
 
             info!("Reassembled file: {}", original_filename);
         }
 
         // Clean up chunks directory
-        tokio::fs::remove_dir_all(chunks_dir).await
+        tokio::fs::remove_dir_all(chunks_dir)
+            .await
             .context("Failed to clean up chunks directory")?;
 
         info!("Cleaned up chunks directory for job {}", job_id);

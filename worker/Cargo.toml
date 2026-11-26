@@ -28,12 +28,12 @@ tokio = { version = "1.48.0", features = ["full"] }
 # ==============================================================================
 # DATABASE
 # ==============================================================================
-sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "tls-native-tls", "postgres", "uuid", "chrono", "json"] }
 
 # ==============================================================================
 # REDIS (Job Queue)
 # ==============================================================================
-redis = { version = "0.32.2", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.8.0", features = ["tokio-comp", "connection-manager"] }
 
 # ==============================================================================
 # GENETICS PROCESSOR (Local Dependency)
@@ -77,13 +77,13 @@ dotenvy = "0.15.7"
 # CRYPTOGRAPHY & SECURITY (Phase 3: Token & Password Generation)
 # ==============================================================================
 # Random number generation for tokens and passwords
-rand = "0.8.5"
+rand = "0.10.2"
 
 # Argon2id password hashing
-argon2 = { version = "0.5.3", features = ["std"] }
+argon2 = "0.6.0"
 
 # Base64 encoding for URL-safe tokens
-base64 = "0.22.1"
+base64 = "0.23.0"
 
 # ==============================================================================
 # EMAIL (Phase 4/5: Email Sending)
@@ -95,7 +95,7 @@ lettre = { version = "0.11.12", features = ["tokio1-native-tls", "smtp-transport
 # FILE COMPRESSION (Phase 7: Download Archive)
 # ==============================================================================
 # ZIP archive creation with STORE method (no compression)
-zip = { version = "2.2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
 # ==============================================================================
 # BUILD PROFILE

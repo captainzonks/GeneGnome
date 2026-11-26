@@ -63,8 +63,7 @@ impl FileValidator {
         info!("Validating file: {}", file_name);
 
         // 1. Size check
-        let metadata = std::fs::metadata(file_path)
-            .context("Failed to get file metadata")?;
+        let metadata = std::fs::metadata(file_path).context("Failed to get file metadata")?;
         let size = metadata.len() as usize;
 
         if size > self.max_file_size {
@@ -88,17 +87,14 @@ impl FileValidator {
         debug!("Extension check passed: {}", ext);
 
         // 4. Magic number verification
-        if let Some(expected_magic) = self.allowed_types.get(&ext) {
-            if !expected_magic.is_empty() {
-                let actual_magic = self.read_magic_number(file_path)?;
-                if !self.verify_magic_number(expected_magic, &actual_magic) {
-                    anyhow::bail!(
-                        "Magic number mismatch for .{} file",
-                        ext
-                    );
-                }
-                debug!("Magic number check passed");
+        if let Some(expected_magic) = self.allowed_types.get(&ext)
+            && !expected_magic.is_empty()
+        {
+            let actual_magic = self.read_magic_number(file_path)?;
+            if !self.verify_magic_number(expected_magic, &actual_magic) {
+                anyhow::bail!("Magic number mismatch for .{} file", ext);
             }
+            debug!("Magic number check passed");
         }
 
         // 5. Content validation (basic format check)
@@ -124,12 +120,7 @@ impl FileValidator {
         let safe = name
             .replace(['/', '\\', '\0'], "_")
             .chars()
-            .filter(|c| {
-                c.is_ascii_alphanumeric()
-                    || *c == '_'
-                    || *c == '.'
-                    || *c == '-'
-            })
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.' || *c == '-')
             .collect::<String>();
 
         // Limit length to 255 characters
@@ -167,8 +158,7 @@ impl FileValidator {
     }
 
     fn verify_magic_number(&self, expected: &[u8], actual: &[u8]) -> bool {
-        expected.len() <= actual.len()
-            && expected.iter().zip(actual.iter()).all(|(e, a)| e == a)
+        expected.len() <= actual.len() && expected.iter().zip(actual.iter()).all(|(e, a)| e == a)
     }
 
     async fn validate_content(&self, path: &Path, ext: &str) -> Result<()> {
@@ -245,7 +235,11 @@ impl FileValidator {
             hasher.update(&buffer[..n]);
         }
 
-        Ok(format!("{:x}", hasher.finalize()))
+        Ok(hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>())
     }
 }
 
@@ -277,7 +271,7 @@ mod tests {
 
         assert_eq!(
             validator.sanitize_filename("file\0with\nnull.txt").unwrap(),
-            "file_withnull.txt"  // \n is filtered out, not replaced
+            "file_withnull.txt" // \n is filtered out, not replaced
         );
     }
 
@@ -290,10 +284,7 @@ mod tests {
             "vcf.gz"
         );
 
-        assert_eq!(
-            validator.get_extension("genome.txt").unwrap(),
-            "txt"
-        );
+        assert_eq!(validator.get_extension("genome.txt").unwrap(), "txt");
 
         assert_eq!(
             validator.get_extension("chr1.dose.vcf.gz.tbi").unwrap(),

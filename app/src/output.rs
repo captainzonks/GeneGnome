@@ -13,19 +13,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 // Apache Arrow/Parquet for columnar data
-use arrow::array::{
-    ArrayRef, Float64Array, StringArray, UInt64Array,
-};
+use arrow::array::{ArrayRef, Float64Array, StringArray, UInt64Array};
 use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::{RecordBatch, RecordBatchReader};
+use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 // SQLite for queryable database
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::parsers::PgsDataset;
 
@@ -273,10 +271,6 @@ struct StreamingState {
     // SQLite connection (kept open across chromosomes)
     sqlite_conn: Option<Connection>,
     sqlite_path: Option<PathBuf>,
-    // JSON file handle and state
-    json_file: Option<std::fs::File>,
-    json_path: Option<PathBuf>,
-    json_first_chromosome: bool,
     // VCF file handle (gzip-compressed) - for merged format
     vcf_file: Option<flate2::write::GzEncoder<std::fs::File>>,
     vcf_path: Option<PathBuf>,
@@ -294,9 +288,9 @@ struct StreamingState {
     chromosomes_processed: u8,
     // Visualization accumulator fields
     per_chromosome: HashMap<u8, (usize, usize, usize)>, // (total, genotyped, imputed)
-    allele_freq_bins: [usize; 20],       // 20 bins: 0.00-0.05, 0.05-0.10, ..., 0.95-1.00
-    maf_bins: [usize; 10],              // 10 bins: 0.00-0.05, ..., 0.45-0.50
-    quality_bins: [usize; 10],          // 10 bins: 0.0-0.1, ..., 0.9-1.0
+    allele_freq_bins: [usize; 20], // 20 bins: 0.00-0.05, 0.05-0.10, ..., 0.95-1.00
+    maf_bins: [usize; 10],         // 10 bins: 0.00-0.05, ..., 0.45-0.50
+    quality_bins: [usize; 10],     // 10 bins: 0.0-0.1, ..., 0.9-1.0
     source_genotyped: usize,
     source_imputed: usize,
     source_low_quality: usize,
@@ -651,7 +645,11 @@ impl OutputGenerator {
         format: &OutputFormat,
         output: &MultiSampleGeneticOutput,
     ) -> Result<PathBuf> {
-        let filename = format!("GenomicData_{}_51samples.{}", self.job_id, format.extension());
+        let filename = format!(
+            "GenomicData_{}_51samples.{}",
+            self.job_id,
+            format.extension()
+        );
         let path = self.output_dir.join(&filename);
 
         match format {
@@ -670,18 +668,12 @@ impl OutputGenerator {
     }
 
     /// Generate JSON output (single-sample, deprecated)
-    async fn generate_json(
-        &self,
-        path: &Path,
-        output: &GeneticAnalysisOutput,
-    ) -> Result<PathBuf> {
+    async fn generate_json(&self, path: &Path, output: &GeneticAnalysisOutput) -> Result<PathBuf> {
         info!("Generating JSON output: {:?}", path);
 
-        let file = std::fs::File::create(path)
-            .context("Failed to create JSON output file")?;
+        let file = std::fs::File::create(path).context("Failed to create JSON output file")?;
 
-        serde_json::to_writer_pretty(file, output)
-            .context("Failed to write JSON output")?;
+        serde_json::to_writer_pretty(file, output).context("Failed to write JSON output")?;
 
         info!(
             "JSON output complete: {} SNPs, {} PGS traits",
@@ -698,13 +690,14 @@ impl OutputGenerator {
         path: &Path,
         output: &MultiSampleGeneticOutput,
     ) -> Result<PathBuf> {
-        info!("Generating multi-sample JSON output (51 samples): {:?}", path);
+        info!(
+            "Generating multi-sample JSON output (51 samples): {:?}",
+            path
+        );
 
-        let file = std::fs::File::create(path)
-            .context("Failed to create JSON output file")?;
+        let file = std::fs::File::create(path).context("Failed to create JSON output file")?;
 
-        serde_json::to_writer_pretty(file, output)
-            .context("Failed to write JSON output")?;
+        serde_json::to_writer_pretty(file, output).context("Failed to write JSON output")?;
 
         info!(
             "Multi-sample JSON output complete: {} SNPs, 51 samples, {} PGS traits",
@@ -742,22 +735,34 @@ impl OutputGenerator {
 
         // Build Arrow arrays for variants
         let rsid_array: ArrayRef = Arc::new(StringArray::from(
-            all_variants.iter().map(|v| v.rsid.as_str()).collect::<Vec<_>>(),
+            all_variants
+                .iter()
+                .map(|v| v.rsid.as_str())
+                .collect::<Vec<_>>(),
         ));
         let position_array: ArrayRef = Arc::new(UInt64Array::from(
             all_variants.iter().map(|v| v.position).collect::<Vec<_>>(),
         ));
         let ref_array: ArrayRef = Arc::new(StringArray::from(
-            all_variants.iter().map(|v| v.ref_allele.as_str()).collect::<Vec<_>>(),
+            all_variants
+                .iter()
+                .map(|v| v.ref_allele.as_str())
+                .collect::<Vec<_>>(),
         ));
         let alt_array: ArrayRef = Arc::new(StringArray::from(
-            all_variants.iter().map(|v| v.alt_allele.as_str()).collect::<Vec<_>>(),
+            all_variants
+                .iter()
+                .map(|v| v.alt_allele.as_str())
+                .collect::<Vec<_>>(),
         ));
         let dosage_array: ArrayRef = Arc::new(Float64Array::from(
             all_variants.iter().map(|v| v.dosage).collect::<Vec<_>>(),
         ));
         let source_array: ArrayRef = Arc::new(StringArray::from(
-            all_variants.iter().map(|v| v.source.as_str()).collect::<Vec<_>>(),
+            all_variants
+                .iter()
+                .map(|v| v.source.as_str())
+                .collect::<Vec<_>>(),
         ));
         let quality_array: ArrayRef = Arc::new(Float64Array::from(
             all_variants
@@ -795,10 +800,7 @@ impl OutputGenerator {
             .context("Failed to write Parquet data")?;
         writer.close().context("Failed to close Parquet writer")?;
 
-        info!(
-            "Parquet output complete: {} variants",
-            all_variants.len()
-        );
+        info!("Parquet output complete: {} variants", all_variants.len());
 
         Ok(path.to_path_buf())
     }
@@ -809,7 +811,10 @@ impl OutputGenerator {
         path: &Path,
         output: &MultiSampleGeneticOutput,
     ) -> Result<PathBuf> {
-        info!("Generating multi-sample Parquet output (51 samples): {:?}", path);
+        info!(
+            "Generating multi-sample Parquet output (51 samples): {:?}",
+            path
+        );
 
         // Flatten all chromosomes and all samples into a single dataset
         // Each row represents one sample's data for one variant
@@ -841,43 +846,76 @@ impl OutputGenerator {
 
         // Build Arrow arrays for multi-sample variants
         let rsid_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(v, _)| v.rsid.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.rsid.as_str())
+                .collect::<Vec<_>>(),
         ));
         let chromosome_array: ArrayRef = Arc::new(UInt64Array::from(
-            all_rows.iter().map(|(v, _)| v.chromosome as u64).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.chromosome as u64)
+                .collect::<Vec<_>>(),
         ));
         let position_array: ArrayRef = Arc::new(UInt64Array::from(
             all_rows.iter().map(|(v, _)| v.position).collect::<Vec<_>>(),
         ));
         let ref_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(v, _)| v.ref_allele.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.ref_allele.as_str())
+                .collect::<Vec<_>>(),
         ));
         let alt_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(v, _)| v.alt_allele.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.alt_allele.as_str())
+                .collect::<Vec<_>>(),
         ));
         let allele_freq_array: ArrayRef = Arc::new(Float64Array::from(
-            all_rows.iter().map(|(v, _)| v.allele_freq).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.allele_freq)
+                .collect::<Vec<_>>(),
         ));
         let minor_allele_freq_array: ArrayRef = Arc::new(Float64Array::from(
-            all_rows.iter().map(|(v, _)| v.minor_allele_freq).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| v.minor_allele_freq)
+                .collect::<Vec<_>>(),
         ));
         let is_typed_array: ArrayRef = Arc::new(UInt64Array::from(
-            all_rows.iter().map(|(v, _)| if v.is_typed { 1u64 } else { 0u64 }).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(v, _)| if v.is_typed { 1u64 } else { 0u64 })
+                .collect::<Vec<_>>(),
         ));
         let sample_id_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(_, s)| s.sample_id.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(_, s)| s.sample_id.as_str())
+                .collect::<Vec<_>>(),
         ));
         let genotype_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(_, s)| s.genotype.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(_, s)| s.genotype.as_str())
+                .collect::<Vec<_>>(),
         ));
         let dosage_array: ArrayRef = Arc::new(Float64Array::from(
             all_rows.iter().map(|(_, s)| s.dosage).collect::<Vec<_>>(),
         ));
         let source_array: ArrayRef = Arc::new(StringArray::from(
-            all_rows.iter().map(|(_, s)| s.source.as_str()).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(_, s)| s.source.as_str())
+                .collect::<Vec<_>>(),
         ));
         let quality_array: ArrayRef = Arc::new(Float64Array::from(
-            all_rows.iter().map(|(_, s)| s.imputation_quality).collect::<Vec<_>>(),
+            all_rows
+                .iter()
+                .map(|(_, s)| s.imputation_quality)
+                .collect::<Vec<_>>(),
         ));
 
         // Create RecordBatch
@@ -1041,24 +1079,26 @@ impl OutputGenerator {
         tx.commit().context("Failed to commit variants")?;
 
         // Insert PGS data
-        let tx = conn.transaction().context("Failed to start PGS transaction")?;
+        let tx = conn
+            .transaction()
+            .context("Failed to start PGS transaction")?;
         {
             let mut stmt_unscaled = tx
-                .prepare("INSERT INTO pgs_unscaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)")
+                .prepare(
+                    "INSERT INTO pgs_unscaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)",
+                )
                 .context("Failed to prepare pgs_unscaled insert")?;
 
             for record in &output.pgs_unscaled {
                 stmt_unscaled
-                    .execute(params![
-                        record.sample_id,
-                        record.trait_label,
-                        record.value,
-                    ])
+                    .execute(params![record.sample_id, record.trait_label, record.value,])
                     .context("Failed to insert PGS unscaled record")?;
             }
 
             let mut stmt_scaled = tx
-                .prepare("INSERT INTO pgs_scaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)")
+                .prepare(
+                    "INSERT INTO pgs_scaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)",
+                )
                 .context("Failed to prepare pgs_scaled insert")?;
 
             for record in &output.pgs_scaled {
@@ -1096,7 +1136,10 @@ impl OutputGenerator {
         path: &Path,
         output: &MultiSampleGeneticOutput,
     ) -> Result<PathBuf> {
-        info!("Generating multi-sample SQLite output (51 samples): {:?}", path);
+        info!(
+            "Generating multi-sample SQLite output (51 samples): {:?}",
+            path
+        );
 
         let mut conn = Connection::open(path).context("Failed to create SQLite database")?;
 
@@ -1222,24 +1265,26 @@ impl OutputGenerator {
         tx.commit().context("Failed to commit variants")?;
 
         // Insert PGS data
-        let tx = conn.transaction().context("Failed to start PGS transaction")?;
+        let tx = conn
+            .transaction()
+            .context("Failed to start PGS transaction")?;
         {
             let mut stmt_unscaled = tx
-                .prepare("INSERT INTO pgs_unscaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)")
+                .prepare(
+                    "INSERT INTO pgs_unscaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)",
+                )
                 .context("Failed to prepare pgs_unscaled insert")?;
 
             for record in &output.pgs_unscaled {
                 stmt_unscaled
-                    .execute(params![
-                        record.sample_id,
-                        record.trait_label,
-                        record.value,
-                    ])
+                    .execute(params![record.sample_id, record.trait_label, record.value,])
                     .context("Failed to insert PGS unscaled record")?;
             }
 
             let mut stmt_scaled = tx
-                .prepare("INSERT INTO pgs_scaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)")
+                .prepare(
+                    "INSERT INTO pgs_scaled (sample_id, trait_label, value) VALUES (?1, ?2, ?3)",
+                )
                 .context("Failed to prepare pgs_scaled insert")?;
 
             for record in &output.pgs_scaled {
@@ -1278,11 +1323,7 @@ impl OutputGenerator {
     }
 
     /// Generate VCF output (bioinformatics standard)
-    async fn generate_vcf(
-        &self,
-        path: &Path,
-        output: &GeneticAnalysisOutput,
-    ) -> Result<PathBuf> {
+    async fn generate_vcf(&self, path: &Path, output: &GeneticAnalysisOutput) -> Result<PathBuf> {
         info!("Generating VCF output: {:?}", path);
 
         use std::io::Write;
@@ -1294,9 +1335,18 @@ impl OutputGenerator {
         writeln!(file, "##fileformat=VCFv4.3")?;
         writeln!(file, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
         writeln!(file, "{VCF_SOURCE}")?;
-        writeln!(file, "##INFO=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">")?;
-        writeln!(file, "##INFO=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">")?;
-        writeln!(file, "##INFO=<ID=SRC,Number=1,Type=String,Description=\"Data Source (Genotyped/Imputed/ImputedLowQual)\">")?;
+        writeln!(
+            file,
+            "##INFO=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">"
+        )?;
+        writeln!(
+            file,
+            "##INFO=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">"
+        )?;
+        writeln!(
+            file,
+            "##INFO=<ID=SRC,Number=1,Type=String,Description=\"Data Source (Genotyped/Imputed/ImputedLowQual)\">"
+        )?;
         writeln!(file, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")?;
 
         // Write variants chromosome by chromosome
@@ -1340,7 +1390,10 @@ impl OutputGenerator {
         path: &Path,
         output: &MultiSampleGeneticOutput,
     ) -> Result<PathBuf> {
-        info!("Generating multi-sample VCF output (51 samples): {:?}", path);
+        info!(
+            "Generating multi-sample VCF output (51 samples): {:?}",
+            path
+        );
 
         use std::io::Write;
 
@@ -1352,26 +1405,52 @@ impl OutputGenerator {
         writeln!(writer, "##fileformat=VCFv4.3")?;
         writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
         writeln!(writer, "{VCF_SOURCE}")?;
-        writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
-        writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
-        writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
-        writeln!(writer, "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")?;
-        writeln!(writer, "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">")?;
-        writeln!(writer, "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">")?;
+        writeln!(
+            writer,
+            "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">"
+        )?;
+        writeln!(
+            writer,
+            "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">"
+        )?;
+        writeln!(
+            writer,
+            "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">"
+        )?;
+        writeln!(
+            writer,
+            "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"
+        )?;
+        writeln!(
+            writer,
+            "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">"
+        )?;
+        writeln!(
+            writer,
+            "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">"
+        )?;
 
         // Build sample list from first variant (all variants have same samples)
-        let sample_ids: Vec<String> = if let Some(first_chr_variants) = output.chromosomes.values().next() {
-            if let Some(first_variant) = first_chr_variants.first() {
-                first_variant.samples.iter().map(|s| s.sample_id.clone()).collect()
+        let sample_ids: Vec<String> =
+            if let Some(first_chr_variants) = output.chromosomes.values().next() {
+                if let Some(first_variant) = first_chr_variants.first() {
+                    first_variant
+                        .samples
+                        .iter()
+                        .map(|s| s.sample_id.clone())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
-            }
-        } else {
-            Vec::new()
-        };
+            };
 
         // Write header line with sample IDs
-        write!(writer, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT")?;
+        write!(
+            writer,
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
+        )?;
         for sample_id in &sample_ids {
             write!(writer, "\t{}", sample_id)?;
         }
@@ -1420,9 +1499,7 @@ impl OutputGenerator {
                         write!(
                             writer,
                             "\t{}:{:.3}:{}",
-                            sample.genotype,
-                            sample.dosage,
-                            iq_str
+                            sample.genotype, sample.dosage, iq_str
                         )?;
                     }
                     writeln!(writer)?;
@@ -1431,7 +1508,9 @@ impl OutputGenerator {
         }
 
         // Finalize gzip stream
-        writer.finish().context("Failed to finalize gzip compression")?;
+        writer
+            .finish()
+            .context("Failed to finalize gzip compression")?;
 
         info!(
             "Multi-sample VCF output complete: {} variants × 51 samples across 22 chromosomes",
@@ -1474,7 +1553,10 @@ impl OutputGenerator {
     ) -> Result<()> {
         use std::io::Write;
 
-        info!("Initializing streaming output for {} formats", formats.len());
+        info!(
+            "Initializing streaming output for {} formats",
+            formats.len()
+        );
 
         // Create output directory
         std::fs::create_dir_all(&self.output_dir)?;
@@ -1485,9 +1567,6 @@ impl OutputGenerator {
             vcf_format,
             sqlite_conn: None,
             sqlite_path: None,
-            json_file: None,
-            json_path: None,
-            json_first_chromosome: true,
             vcf_file: None,
             vcf_path: None,
             vcf_header_written: false,
@@ -1529,12 +1608,16 @@ impl OutputGenerator {
 
             match format {
                 OutputFormat::Sqlite => {
-                    let filename = format!("GenomicData_{}_51samples.{}", self.job_id, format.extension());
+                    let filename = format!(
+                        "GenomicData_{}_51samples.{}",
+                        self.job_id,
+                        format.extension()
+                    );
                     let path = self.output_dir.join(&filename);
 
                     info!("Initializing SQLite database: {:?}", path);
-                    let conn = Connection::open(&path)
-                        .context("Failed to create SQLite database")?;
+                    let conn =
+                        Connection::open(&path).context("Failed to create SQLite database")?;
 
                     // Optimize SQLite settings for large dataset
                     // Note: Using execute_batch for PRAGMA statements (handles return values automatically)
@@ -1615,27 +1698,53 @@ impl OutputGenerator {
                     match state.vcf_format {
                         VcfFormat::Merged => {
                             // Single merged VCF file for all chromosomes
-                            let filename = format!("GenomicData_{}_51samples.{}", self.job_id, format.extension());
+                            let filename = format!(
+                                "GenomicData_{}_51samples.{}",
+                                self.job_id,
+                                format.extension()
+                            );
                             let path = self.output_dir.join(&filename);
 
                             info!("Initializing merged VCF file (gzip-compressed): {:?}", path);
                             let file = std::fs::File::create(&path)
                                 .context("Failed to create VCF file")?;
-                            let mut writer = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+                            let mut writer =
+                                flate2::write::GzEncoder::new(file, flate2::Compression::default());
 
                             // Write VCF header
                             writeln!(writer, "##fileformat=VCFv4.3")?;
                             writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
                             writeln!(writer, "{VCF_SOURCE}")?;
-                            writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
-                            writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
-                            writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
-                            writeln!(writer, "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")?;
-                            writeln!(writer, "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">")?;
-                            writeln!(writer, "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">")?;
+                            writeln!(
+                                writer,
+                                "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">"
+                            )?;
+                            writeln!(
+                                writer,
+                                "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">"
+                            )?;
+                            writeln!(
+                                writer,
+                                "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">"
+                            )?;
+                            writeln!(
+                                writer,
+                                "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"
+                            )?;
+                            writeln!(
+                                writer,
+                                "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">"
+                            )?;
+                            writeln!(
+                                writer,
+                                "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">"
+                            )?;
 
                             // Write header line with sample IDs (samp1-samp50 + user)
-                            write!(writer, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT")?;
+                            write!(
+                                writer,
+                                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
+                            )?;
                             for i in 1..=50 {
                                 write!(writer, "\tsamp{}", i)?;
                             }
@@ -1650,7 +1759,9 @@ impl OutputGenerator {
                             let base_name = format!("GenomicData_{}_51samples", self.job_id);
                             let base_path = self.output_dir.join(&base_name);
 
-                            info!("Initializing per-chromosome VCF files (will create chr1.vcf.gz, chr2.vcf.gz, etc.)");
+                            info!(
+                                "Initializing per-chromosome VCF files (will create chr1.vcf.gz, chr2.vcf.gz, etc.)"
+                            );
                             state.vcf_base_path = Some(base_path);
                         }
                     }
@@ -1660,7 +1771,10 @@ impl OutputGenerator {
                     let base_name = format!("GenomicData_{}_51samples", self.job_id);
                     let base_path = self.output_dir.join(&base_name);
 
-                    info!("Initializing Parquet streaming (per-chromosome files): {:?}", base_path);
+                    info!(
+                        "Initializing Parquet streaming (per-chromosome files): {:?}",
+                        base_path
+                    );
                     state.parquet_base_path = Some(base_path);
                 }
                 OutputFormat::RData => {
@@ -1693,10 +1807,15 @@ impl OutputGenerator {
     ) -> Result<()> {
         use std::io::Write;
 
-        let state = self.streaming_state.as_mut()
-            .ok_or_else(|| anyhow::anyhow!("Streaming not initialized. Call initialize_streaming_output() first."))?;
+        let state = self.streaming_state.as_mut().ok_or_else(|| {
+            anyhow::anyhow!("Streaming not initialized. Call initialize_streaming_output() first.")
+        })?;
 
-        info!("Appending chromosome {} ({} variants) to streaming output", chromosome, variants.len());
+        info!(
+            "Appending chromosome {} ({} variants) to streaming output",
+            chromosome,
+            variants.len()
+        );
 
         // Update metadata and visualization accumulators
         let chr_genotyped = variants.iter().filter(|v| v.is_typed).count();
@@ -1719,7 +1838,9 @@ impl OutputGenerator {
         state.chromosomes_processed += 1;
 
         // Per-chromosome stats
-        state.per_chromosome.insert(chromosome, (chr_total, chr_genotyped, chr_imputed));
+        state
+            .per_chromosome
+            .insert(chromosome, (chr_total, chr_genotyped, chr_imputed));
 
         // Accumulate histogram bins, source breakdown, and enhanced stats
         let mut chr_transitions: usize = 0;
@@ -1796,21 +1917,32 @@ impl OutputGenerator {
         // Accumulate per-chromosome Ti/Tv and heterozygosity
         state.transitions += chr_transitions;
         state.transversions += chr_transversions;
-        state.per_chr_transitions.insert(chromosome, chr_transitions);
-        state.per_chr_transversions.insert(chromosome, chr_transversions);
+        state
+            .per_chr_transitions
+            .insert(chromosome, chr_transitions);
+        state
+            .per_chr_transversions
+            .insert(chromosome, chr_transversions);
         state.het_count += chr_het_count;
         state.het_total_called += chr_het_total;
-        state.per_chr_het.insert(chromosome, (chr_het_count, chr_het_total));
+        state
+            .per_chr_het
+            .insert(chromosome, (chr_het_count, chr_het_total));
 
         // Append to each format
         for format in state.formats.clone() {
             match format {
                 OutputFormat::Sqlite => {
                     if let Some(conn) = &mut state.sqlite_conn {
-                        info!("  Appending chromosome {} to SQLite ({} variants × 51 samples = {} rows)",
-                              chromosome, variants.len(), variants.len() * 51);
+                        info!(
+                            "  Appending chromosome {} to SQLite ({} variants × 51 samples = {} rows)",
+                            chromosome,
+                            variants.len(),
+                            variants.len() * 51
+                        );
 
-                        let tx = conn.transaction()
+                        let tx = conn
+                            .transaction()
                             .context("Failed to start SQLite transaction")?;
                         {
                             let mut stmt = tx.prepare(
@@ -1898,9 +2030,7 @@ impl OutputGenerator {
                                         write!(
                                             file,
                                             "\t{}:{:.3}:{}",
-                                            sample.genotype,
-                                            sample.dosage,
-                                            iq_str
+                                            sample.genotype, sample.dosage, iq_str
                                         )?;
                                     }
                                     writeln!(file)?;
@@ -1916,27 +2046,56 @@ impl OutputGenerator {
                                 // Extract filename stem (without .vcf.gz double extension)
                                 let full_name = base_path.file_name().unwrap().to_str().unwrap();
                                 let base_filename = full_name.trim_end_matches(".vcf.gz");
-                                let chr_filename = format!("{}_chr{}.vcf.gz", base_filename, chromosome);
+                                let chr_filename =
+                                    format!("{}_chr{}.vcf.gz", base_filename, chromosome);
                                 let chr_path = base_path.parent().unwrap().join(&chr_filename);
 
                                 // Create chromosome-specific VCF file
                                 let file = std::fs::File::create(&chr_path)
                                     .context("Failed to create per-chromosome VCF file")?;
-                                let mut writer = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+                                let mut writer = flate2::write::GzEncoder::new(
+                                    file,
+                                    flate2::Compression::default(),
+                                );
 
                                 // Write VCF header
                                 writeln!(writer, "##fileformat=VCFv4.3")?;
-                                writeln!(writer, "##fileDate={}", chrono::Utc::now().format("%Y%m%d"))?;
+                                writeln!(
+                                    writer,
+                                    "##fileDate={}",
+                                    chrono::Utc::now().format("%Y%m%d")
+                                )?;
                                 writeln!(writer, "{VCF_SOURCE}")?;
-                                writeln!(writer, "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">")?;
-                                writeln!(writer, "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">")?;
-                                writeln!(writer, "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">")?;
-                                writeln!(writer, "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">")?;
-                                writeln!(writer, "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">")?;
-                                writeln!(writer, "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">")?;
+                                writeln!(
+                                    writer,
+                                    "##INFO=<ID=AF,Number=A,Type=Float,Description=\"Allele Frequency\">"
+                                )?;
+                                writeln!(
+                                    writer,
+                                    "##INFO=<ID=MAF,Number=1,Type=Float,Description=\"Minor Allele Frequency\">"
+                                )?;
+                                writeln!(
+                                    writer,
+                                    "##INFO=<ID=TYPED,Number=0,Type=Flag,Description=\"Variant was genotyped (not imputed)\">"
+                                )?;
+                                writeln!(
+                                    writer,
+                                    "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"
+                                )?;
+                                writeln!(
+                                    writer,
+                                    "##FORMAT=<ID=DS,Number=1,Type=Float,Description=\"Dosage\">"
+                                )?;
+                                writeln!(
+                                    writer,
+                                    "##FORMAT=<ID=IQ,Number=1,Type=Float,Description=\"Imputation Quality (R²)\">"
+                                )?;
 
                                 // Write header line with sample IDs (samp1-samp50 + user)
-                                write!(writer, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT")?;
+                                write!(
+                                    writer,
+                                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
+                                )?;
                                 for i in 1..=50 {
                                     write!(writer, "\tsamp{}", i)?;
                                 }
@@ -1983,19 +2142,22 @@ impl OutputGenerator {
                                         write!(
                                             writer,
                                             "\t{}:{:.3}:{}",
-                                            sample.genotype,
-                                            sample.dosage,
-                                            iq_str
+                                            sample.genotype, sample.dosage, iq_str
                                         )?;
                                     }
                                     writeln!(writer)?;
                                 }
 
                                 // Finalize gzip compression
-                                writer.finish().context("Failed to finalize per-chromosome VCF gzip compression")?;
+                                writer.finish().context(
+                                    "Failed to finalize per-chromosome VCF gzip compression",
+                                )?;
 
                                 state.vcf_files.push(chr_path.clone());
-                                info!("  ✓ VCF chromosome {} written to {:?}", chromosome, chr_path);
+                                info!(
+                                    "  ✓ VCF chromosome {} written to {:?}",
+                                    chromosome, chr_path
+                                );
                             }
                         }
                     }
@@ -2004,9 +2166,11 @@ impl OutputGenerator {
                     if let Some(base_path) = &state.parquet_base_path {
                         info!("  Writing chromosome {} to Parquet file", chromosome);
 
-                        let chr_filename = format!("{}_chr{}.parquet",
+                        let chr_filename = format!(
+                            "{}_chr{}.parquet",
                             base_path.file_name().unwrap().to_str().unwrap(),
-                            chromosome);
+                            chromosome
+                        );
                         let chr_path = base_path.parent().unwrap().join(&chr_filename);
 
                         // Create Arrow schema
@@ -2033,8 +2197,9 @@ impl OutputGenerator {
                             .set_compression(parquet::basic::Compression::SNAPPY)
                             .build();
 
-                        let mut writer = ArrowWriter::try_new(file, variant_schema.clone(), Some(props))
-                            .context("Failed to create Parquet writer")?;
+                        let mut writer =
+                            ArrowWriter::try_new(file, variant_schema.clone(), Some(props))
+                                .context("Failed to create Parquet writer")?;
 
                         // Write in batches to avoid OOM (10,000 variants at a time)
                         const BATCH_SIZE: usize = 10_000;
@@ -2046,7 +2211,8 @@ impl OutputGenerator {
                             let variant_chunk = &variants[chunk_start..chunk_end];
 
                             // Flatten chunk variants and samples into rows
-                            let mut chunk_rows: Vec<(&MultiSampleVariant, &SampleData)> = Vec::new();
+                            let mut chunk_rows: Vec<(&MultiSampleVariant, &SampleData)> =
+                                Vec::new();
                             for variant in variant_chunk {
                                 for sample in &variant.samples {
                                     chunk_rows.push((variant, sample));
@@ -2055,43 +2221,79 @@ impl OutputGenerator {
 
                             // Build Arrow arrays for this chunk only
                             let rsid_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(v, _)| v.rsid.as_str()).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.rsid.as_str())
+                                    .collect::<Vec<_>>(),
                             ));
                             let chromosome_array: ArrayRef = Arc::new(UInt64Array::from(
-                                chunk_rows.iter().map(|(v, _)| v.chromosome as u64).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.chromosome as u64)
+                                    .collect::<Vec<_>>(),
                             ));
                             let position_array: ArrayRef = Arc::new(UInt64Array::from(
-                                chunk_rows.iter().map(|(v, _)| v.position).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.position)
+                                    .collect::<Vec<_>>(),
                             ));
                             let ref_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(v, _)| v.ref_allele.as_str()).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.ref_allele.as_str())
+                                    .collect::<Vec<_>>(),
                             ));
                             let alt_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(v, _)| v.alt_allele.as_str()).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.alt_allele.as_str())
+                                    .collect::<Vec<_>>(),
                             ));
                             let allele_freq_array: ArrayRef = Arc::new(Float64Array::from(
-                                chunk_rows.iter().map(|(v, _)| v.allele_freq).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.allele_freq)
+                                    .collect::<Vec<_>>(),
                             ));
                             let minor_allele_freq_array: ArrayRef = Arc::new(Float64Array::from(
-                                chunk_rows.iter().map(|(v, _)| v.minor_allele_freq).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| v.minor_allele_freq)
+                                    .collect::<Vec<_>>(),
                             ));
                             let is_typed_array: ArrayRef = Arc::new(UInt64Array::from(
-                                chunk_rows.iter().map(|(v, _)| if v.is_typed { 1u64 } else { 0u64 }).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(v, _)| if v.is_typed { 1u64 } else { 0u64 })
+                                    .collect::<Vec<_>>(),
                             ));
                             let sample_id_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(_, s)| s.sample_id.as_str()).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(_, s)| s.sample_id.as_str())
+                                    .collect::<Vec<_>>(),
                             ));
                             let genotype_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(_, s)| s.genotype.as_str()).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(_, s)| s.genotype.as_str())
+                                    .collect::<Vec<_>>(),
                             ));
                             let dosage_array: ArrayRef = Arc::new(Float64Array::from(
                                 chunk_rows.iter().map(|(_, s)| s.dosage).collect::<Vec<_>>(),
                             ));
                             let source_array: ArrayRef = Arc::new(StringArray::from(
-                                chunk_rows.iter().map(|(_, s)| format!("{:?}", s.source)).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(_, s)| format!("{:?}", s.source))
+                                    .collect::<Vec<_>>(),
                             ));
                             let quality_array: ArrayRef = Arc::new(Float64Array::from(
-                                chunk_rows.iter().map(|(_, s)| s.imputation_quality).collect::<Vec<_>>(),
+                                chunk_rows
+                                    .iter()
+                                    .map(|(_, s)| s.imputation_quality)
+                                    .collect::<Vec<_>>(),
                             ));
 
                             // Create RecordBatch for this chunk
@@ -2116,7 +2318,8 @@ impl OutputGenerator {
                             .context("Failed to create Arrow RecordBatch")?;
 
                             // Write this batch immediately
-                            writer.write(&variant_batch)
+                            writer
+                                .write(&variant_batch)
                                 .context("Failed to write Parquet batch")?;
 
                             batches_written += 1;
@@ -2124,12 +2327,16 @@ impl OutputGenerator {
                         }
 
                         // Close writer
-                        writer.close()
-                            .context("Failed to close Parquet writer")?;
+                        writer.close().context("Failed to close Parquet writer")?;
 
                         state.parquet_files.push(chr_path.clone());
-                        info!("  ✓ Parquet chromosome {} written to {:?} ({} batches, {} total rows)",
-                              chromosome, chr_path, batches_written, variants.len() * 51);
+                        info!(
+                            "  ✓ Parquet chromosome {} written to {:?} ({} batches, {} total rows)",
+                            chromosome,
+                            chr_path,
+                            batches_written,
+                            variants.len() * 51
+                        );
                     }
                 }
                 OutputFormat::RData => {
@@ -2139,8 +2346,10 @@ impl OutputGenerator {
             }
         }
 
-        info!("✓ Chromosome {} appended to all formats ({} total variants accumulated)",
-              chromosome, state.total_variants);
+        info!(
+            "✓ Chromosome {} appended to all formats ({} total variants accumulated)",
+            chromosome, state.total_variants
+        );
         Ok(())
     }
 
@@ -2151,13 +2360,19 @@ impl OutputGenerator {
     ///
     /// # Returns
     /// * HashMap of format -> file path
-    pub async fn finalize_streaming_output(&mut self) -> Result<(HashMap<OutputFormat, PathBuf>, VisualizationSummary)> {
-        let mut state = self.streaming_state.take()
+    pub async fn finalize_streaming_output(
+        &mut self,
+    ) -> Result<(HashMap<OutputFormat, PathBuf>, VisualizationSummary)> {
+        let mut state = self
+            .streaming_state
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Streaming not initialized."))?;
 
         info!("Finalizing streaming output...");
-        info!("Total accumulated: {} variants across {} chromosomes",
-              state.total_variants, state.chromosomes_processed);
+        info!(
+            "Total accumulated: {} variants across {} chromosomes",
+            state.total_variants, state.chromosomes_processed
+        );
 
         let mut result = HashMap::new();
 
@@ -2165,18 +2380,22 @@ impl OutputGenerator {
         for format in &state.formats {
             match format {
                 OutputFormat::Sqlite => {
-                    if let (Some(mut conn), Some(path)) = (state.sqlite_conn.take(), state.sqlite_path.take()) {
+                    if let (Some(conn), Some(path)) =
+                        (state.sqlite_conn.take(), state.sqlite_path.take())
+                    {
                         info!("Finalizing SQLite database...");
 
                         // Insert metadata
                         let total_snps_str = state.total_variants.to_string();
                         let genotyped_snps_str = state.genotyped_variants.to_string();
-                        let imputed_snps_str = (state.total_variants - state.genotyped_variants).to_string();
+                        let imputed_snps_str =
+                            (state.total_variants - state.genotyped_variants).to_string();
                         let low_quality_snps_str = state.low_quality_variants.to_string();
                         let processing_date = chrono::Utc::now().to_rfc3339();
                         let genome_file = "23andMe genome data".to_string();
                         let imputation_server = "Michigan Imputation Server 2".to_string();
-                        let reference_panel = "openSNP (50 samples) + user (1 sample) = 51 total".to_string();
+                        let reference_panel =
+                            "openSNP (50 samples) + user (1 sample) = 51 total".to_string();
 
                         let metadata_items = vec![
                             ("job_id", &self.job_id),
@@ -2217,14 +2436,18 @@ impl OutputGenerator {
                         conn.execute_batch(
                             "PRAGMA journal_mode = DELETE;  -- Re-enable WAL journal
                              PRAGMA synchronous = FULL;     -- Re-enable fsync for durability
-                             VACUUM;"                       // Reclaim free space and apply page_size
-                        ).context("Failed to optimize database")?;
+                             VACUUM;", // Reclaim free space and apply page_size
+                        )
+                        .context("Failed to optimize database")?;
 
                         // Close connection
                         drop(conn);
 
-                        info!("✓ SQLite finalized: {} variants × 51 samples = {} rows",
-                              state.total_variants, state.total_variants * 51);
+                        info!(
+                            "✓ SQLite finalized: {} variants × 51 samples = {} rows",
+                            state.total_variants,
+                            state.total_variants * 51
+                        );
                         result.insert(*format, path);
                     }
                 }
@@ -2237,19 +2460,29 @@ impl OutputGenerator {
                     match state.vcf_format {
                         VcfFormat::Merged => {
                             // Finalize single merged VCF file
-                            if let (Some(writer), Some(path)) = (state.vcf_file.take(), state.vcf_path.take()) {
+                            if let (Some(writer), Some(path)) =
+                                (state.vcf_file.take(), state.vcf_path.take())
+                            {
                                 info!("Finalizing merged VCF file (flushing gzip compression)...");
 
                                 // Finalize gzip compression
-                                writer.finish().context("Failed to finalize VCF gzip compression")?;
+                                writer
+                                    .finish()
+                                    .context("Failed to finalize VCF gzip compression")?;
 
-                                info!("✓ VCF finalized: {} variants × 51 samples in single merged file", state.total_variants);
+                                info!(
+                                    "✓ VCF finalized: {} variants × 51 samples in single merged file",
+                                    state.total_variants
+                                );
                                 result.insert(*format, path);
                             }
                         }
                         VcfFormat::PerChromosome => {
                             // Per-chromosome VCF files are already finalized during append_chromosome()
-                            info!("✓ VCF finalized: Keeping {} per-chromosome VCF files", state.vcf_files.len());
+                            info!(
+                                "✓ VCF finalized: Keeping {} per-chromosome VCF files",
+                                state.vcf_files.len()
+                            );
 
                             for (idx, chr_file) in state.vcf_files.iter().enumerate() {
                                 info!("  chr{}: {:?}", idx + 1, chr_file.file_name().unwrap());
@@ -2264,14 +2497,19 @@ impl OutputGenerator {
                     }
                 }
                 OutputFormat::Parquet => {
-                    if let Some(base_path) = &state.parquet_base_path {
-                        info!("Finalizing Parquet files ({} chromosome files)...", state.parquet_files.len());
+                    if let Some(_base_path) = &state.parquet_base_path {
+                        info!(
+                            "Finalizing Parquet files ({} chromosome files)...",
+                            state.parquet_files.len()
+                        );
 
                         // Keep per-chromosome Parquet files (partitioned format)
                         // This improves query performance for chromosome-specific analyses
                         // Users can filter by chromosome column without scanning all data
-                        info!("✓ Parquet finalized: Keeping {} partitioned chromosome files for optimal query performance",
-                              state.parquet_files.len());
+                        info!(
+                            "✓ Parquet finalized: Keeping {} partitioned chromosome files for optimal query performance",
+                            state.parquet_files.len()
+                        );
 
                         for (idx, chr_file) in state.parquet_files.iter().enumerate() {
                             info!("  chr{}: {:?}", idx + 1, chr_file.file_name().unwrap());
@@ -2279,7 +2517,9 @@ impl OutputGenerator {
 
                         // All chromosome files will be included in ZIP archive automatically
                         // Return the first file path as the representative path
-                        let first_file = state.parquet_files.first()
+                        let first_file = state
+                            .parquet_files
+                            .first()
                             .context("No Parquet files generated")?;
                         result.insert(*format, first_file.clone());
                     }
@@ -2294,7 +2534,8 @@ impl OutputGenerator {
         info!("✓ Streaming output finalized successfully");
 
         // Build visualization summary from accumulated counters
-        let mut per_chromosome: Vec<ChromosomeStats> = state.per_chromosome
+        let mut per_chromosome: Vec<ChromosomeStats> = state
+            .per_chromosome
             .iter()
             .map(|(&chr, &(total, genotyped, imputed))| {
                 let ti = state.per_chr_transitions.get(&chr).copied().unwrap_or(0);
@@ -2307,8 +2548,16 @@ impl OutputGenerator {
                     imputed,
                     transitions: ti,
                     transversions: tv,
-                    ti_tv_ratio: if tv > 0 { Some(ti as f64 / tv as f64) } else { None },
-                    heterozygosity_rate: if het_total > 0 { Some(het as f64 / het_total as f64) } else { None },
+                    ti_tv_ratio: if tv > 0 {
+                        Some(ti as f64 / tv as f64)
+                    } else {
+                        None
+                    },
+                    heterozygosity_rate: if het_total > 0 {
+                        Some(het as f64 / het_total as f64)
+                    } else {
+                        None
+                    },
                 }
             })
             .collect();
@@ -2399,10 +2648,7 @@ mod tests {
 
     #[test]
     fn test_output_format_mime_type() {
-        assert_eq!(
-            OutputFormat::Json.mime_type(),
-            "application/json"
-        );
+        assert_eq!(OutputFormat::Json.mime_type(), "application/json");
         assert_eq!(
             OutputFormat::Parquet.mime_type(),
             "application/vnd.apache.parquet"

@@ -142,7 +142,7 @@ impl QualityThreshold {
 
     pub fn passes(&self, r2: Option<f64>) -> bool {
         match (self.threshold_value(), r2) {
-            (None, _) => true, // No filter
+            (None, _) => true,       // No filter
             (Some(_), None) => true, // Genotyped data passes
             (Some(threshold), Some(r2_value)) => r2_value >= threshold,
         }

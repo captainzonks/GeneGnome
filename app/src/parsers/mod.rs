@@ -8,10 +8,10 @@
 // Version: 1.2.0
 // ==============================================================================
 
-pub mod vcf;
 pub mod genome23andme;
 pub mod pgs;
+pub mod vcf;
 
-pub use vcf::{VCFParser, VCFRecord, VCFParseError};
 pub use genome23andme::{Genome23Parser, Genome23Record};
-pub use pgs::{PgsParser, PgsRecord, PgsDataset, PgsStats, PgsParseError};
+pub use pgs::{PgsDataset, PgsParser};
+pub use vcf::VCFParser;

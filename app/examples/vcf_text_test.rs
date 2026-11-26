@@ -6,10 +6,10 @@
 // Created: 2025-11-03
 // ==============================================================================
 
-use std::io::{BufRead, BufReader};
-use std::fs::File;
-use std::env;
 use flate2::read::MultiGzDecoder;
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get file path from command line
@@ -68,7 +68,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if count == 0 {
             println!("\nSkipped {} header lines total\n", header_count);
-            println!("First data line (first 100 chars): {}\n", &line[..std::cmp::min(100, line.len())]);
+            println!(
+                "First data line (first 100 chars): {}\n",
+                &line[..std::cmp::min(100, line.len())]
+            );
         }
 
         count += 1;
@@ -88,8 +91,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let info = fields[7];
         let mut r2 = None;
         for part in info.split(';') {
-            if part.starts_with("R2=") {
-                if let Ok(val) = part[3..].parse::<f64>() {
+            if let Some(value) = part.strip_prefix("R2=") {
+                if let Ok(val) = value.parse::<f64>() {
                     r2 = Some(val);
                     r2_sum += val;
                     r2_count += 1;
@@ -107,14 +110,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let last_sample = fields[fields.len() - 1];
             let sample_values: Vec<&str> = last_sample.split(':').collect();
 
-            if ds_idx < sample_values.len() {
-                if let Ok(ds) = sample_values[ds_idx].parse::<f64>() {
-                    ds_sum += ds;
+            if ds_idx < sample_values.len()
+                && let Ok(ds) = sample_values[ds_idx].parse::<f64>()
+            {
+                ds_sum += ds;
 
-                    if count <= 10 {
-                        println!("{:<15} DS={:.4}  R2={}", rsid, ds,
-                            r2.map(|v| format!("{:.4}", v)).unwrap_or("N/A".to_string()));
-                    }
+                if count <= 10 {
+                    println!(
+                        "{:<15} DS={:.4}  R2={}",
+                        rsid,
+                        ds,
+                        r2.map(|v| format!("{:.4}", v)).unwrap_or("N/A".to_string())
+                    );
                 }
             }
         }

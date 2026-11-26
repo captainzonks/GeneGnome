@@ -9,13 +9,13 @@
 // ==============================================================================
 
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Multipart, Path, Query, State,
-    },
-    http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    extract::{
+        Multipart, Path, Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
+    http::{HeaderMap, StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use chrono::Utc;
 use futures_util::sink::SinkExt;
@@ -34,7 +34,10 @@ use crate::{
     error::AppError,
     models::*,
     queue::{JobPayload, JobQueue},
-    security::{verify_password, generate_recovery_codes, normalize_recovery_code, hash_password, generate_download_password},
+    security::{
+        generate_download_password, generate_recovery_codes, hash_password,
+        normalize_recovery_code, verify_password,
+    },
     state::AppState,
     validator::FileValidator,
 };
@@ -136,15 +139,21 @@ pub async fn submit_job(
         match name.as_str() {
             "genome_file" => {
                 let filename = field.file_name().unwrap_or("genome.txt").to_string();
-                let data = field.bytes().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read genome file: {}", e)))?;
+                let data = field.bytes().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read genome file: {}", e))
+                })?;
 
                 // SECURITY: Validate file before writing to disk
-                let validated = validator.validate_upload(&filename, &data, "genome")
+                let validated = validator
+                    .validate_upload(&filename, &data, "genome")
                     .map_err(|e| AppError::BadRequest(format!("Invalid genome file: {}", e)))?;
 
-                info!("Genome file validated: {} ({} bytes, SHA256: {})",
-                    validated.safe_name, validated.size, &validated.hash_sha256[..16]);
+                info!(
+                    "Genome file validated: {} ({} bytes, SHA256: {})",
+                    validated.safe_name,
+                    validated.size,
+                    &validated.hash_sha256[..16]
+                );
 
                 // Save file using sanitized filename
                 let file_path = job_upload_dir.join(&validated.safe_name);
@@ -161,15 +170,22 @@ pub async fn submit_job(
 
             "vcf_file" => {
                 let filename = field.file_name().unwrap_or("chr.vcf.gz").to_string();
-                let data = field.bytes().await
+                let data = field
+                    .bytes()
+                    .await
                     .map_err(|e| AppError::BadRequest(format!("Failed to read VCF file: {}", e)))?;
 
                 // SECURITY: Validate file before writing to disk
-                let validated = validator.validate_upload(&filename, &data, "vcf")
+                let validated = validator
+                    .validate_upload(&filename, &data, "vcf")
                     .map_err(|e| AppError::BadRequest(format!("Invalid VCF file: {}", e)))?;
 
-                info!("VCF file validated: {} ({} bytes, SHA256: {})",
-                    validated.safe_name, validated.size, &validated.hash_sha256[..16]);
+                info!(
+                    "VCF file validated: {} ({} bytes, SHA256: {})",
+                    validated.safe_name,
+                    validated.size,
+                    &validated.hash_sha256[..16]
+                );
 
                 // Save file using sanitized filename
                 let file_path = job_upload_dir.join(&validated.safe_name);
@@ -186,15 +202,22 @@ pub async fn submit_job(
 
             "pgs_file" => {
                 let filename = field.file_name().unwrap_or("scores.txt").to_string();
-                let data = field.bytes().await
+                let data = field
+                    .bytes()
+                    .await
                     .map_err(|e| AppError::BadRequest(format!("Failed to read PGS file: {}", e)))?;
 
                 // SECURITY: Validate file before writing to disk
-                let validated = validator.validate_upload(&filename, &data, "pgs")
+                let validated = validator
+                    .validate_upload(&filename, &data, "pgs")
                     .map_err(|e| AppError::BadRequest(format!("Invalid PGS file: {}", e)))?;
 
-                info!("PGS file validated: {} ({} bytes, SHA256: {})",
-                    validated.safe_name, validated.size, &validated.hash_sha256[..16]);
+                info!(
+                    "PGS file validated: {} ({} bytes, SHA256: {})",
+                    validated.safe_name,
+                    validated.size,
+                    &validated.hash_sha256[..16]
+                );
 
                 // Save file using sanitized filename
                 let file_path = job_upload_dir.join(&validated.safe_name);
@@ -210,8 +233,9 @@ pub async fn submit_job(
             }
 
             "output_formats" => {
-                let data = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read output formats: {}", e)))?;
+                let data = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read output formats: {}", e))
+                })?;
 
                 // Parse format value (can be single format or comma-separated)
                 let formats: Vec<OutputFormat> = data
@@ -229,8 +253,9 @@ pub async fn submit_job(
             }
 
             "quality_threshold" => {
-                let data = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read quality threshold: {}", e)))?;
+                let data = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read quality threshold: {}", e))
+                })?;
 
                 // Parse quality threshold value
                 quality_threshold = match data.trim().to_lowercase().as_str() {
@@ -245,21 +270,27 @@ pub async fn submit_job(
             }
 
             "user_email" => {
-                let email = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read user email: {}", e)))?;
+                let email = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read user email: {}", e))
+                })?;
 
                 // Basic email validation
                 if !email.trim().is_empty() && email.contains('@') {
                     user_email = Some(email.trim().to_string());
-                    info!("Job {} will send download notification to {}", job_id, email.trim());
+                    info!(
+                        "Job {} will send download notification to {}",
+                        job_id,
+                        email.trim()
+                    );
                 } else {
                     warn!("Invalid email provided: {}", email);
                 }
             }
 
             "vcf_format" => {
-                let format = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read VCF format: {}", e)))?;
+                let format = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read VCF format: {}", e))
+                })?;
 
                 // Validate and store VCF format preference
                 vcf_format = match format.trim().to_lowercase().as_str() {
@@ -293,19 +324,19 @@ pub async fn submit_job(
     info!("Job quality threshold: {:?}", quality_threshold);
 
     // Validate required files
-    let genome_file = genome_file
-        .ok_or_else(|| AppError::BadRequest("Missing genome_file".to_string()))?;
+    let _genome_file =
+        genome_file.ok_or_else(|| AppError::BadRequest("Missing genome_file".to_string()))?;
 
     if vcf_files.is_empty() {
         return Err(AppError::BadRequest("Missing vcf_file(s)".to_string()));
     }
 
-    let pgs_file = pgs_file
-        .ok_or_else(|| AppError::BadRequest("Missing pgs_file".to_string()))?;
+    let _pgs_file = pgs_file.ok_or_else(|| AppError::BadRequest("Missing pgs_file".to_string()))?;
 
     // PUBLIC PLATFORM: Require email for job ownership and notifications
-    let user_email = user_email
-        .ok_or_else(|| AppError::BadRequest("Email address is required for job submission".to_string()))?;
+    let user_email = user_email.ok_or_else(|| {
+        AppError::BadRequest("Email address is required for job submission".to_string())
+    })?;
 
     // Create job in database with VCF format metadata
     let created_at = Utc::now();
@@ -342,7 +373,7 @@ pub async fn submit_job(
     // RLS policy - it's keyed by job_id, not user_id - so no context needed)
     for hash in &hashed_codes {
         sqlx::query(
-            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)"
+            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)",
         )
         .bind(job_id)
         .bind(hash)
@@ -351,7 +382,11 @@ pub async fn submit_job(
         .map_err(|e| AppError::Internal(format!("Failed to store recovery code: {}", e)))?;
     }
 
-    info!("Generated {} recovery codes for job {}", plaintext_codes.len(), job_id);
+    info!(
+        "Generated {} recovery codes for job {}",
+        plaintext_codes.len(),
+        job_id
+    );
 
     // Create results directory for job
     let job_results_dir = state.results_dir().join(job_id.to_string());
@@ -363,17 +398,18 @@ pub async fn submit_job(
     let job_queue = JobQueue::new(state.redis_client().clone());
     let payload = JobPayload {
         job_id,
-        user_id: user_email.clone(),  // PUBLIC PLATFORM: Email is the user identifier
-        user_email: Some(user_email.clone()),  // Also store in email field for notifications
+        user_id: user_email.clone(), // PUBLIC PLATFORM: Email is the user identifier
+        user_email: Some(user_email.clone()), // Also store in email field for notifications
         upload_dir: job_upload_dir.to_string_lossy().to_string(),
         output_dir: job_results_dir.to_string_lossy().to_string(),
         output_formats: output_formats.clone(),
         quality_threshold,
-        chunked_upload: false,  // Phase 7.1: Standard upload, no reassembly needed
-        upload_session_id: None,  // Phase 7.1: Only for chunked uploads
+        chunked_upload: false, // Phase 7.1: Standard upload, no reassembly needed
+        upload_session_id: None, // Phase 7.1: Only for chunked uploads
     };
 
-    job_queue.enqueue(&payload)
+    job_queue
+        .enqueue(&payload)
         .map_err(|e| AppError::Internal(format!("Failed to enqueue job: {}", e)))?;
 
     info!("Job {} queued successfully", job_id);
@@ -407,7 +443,15 @@ pub async fn get_job_status(
     .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
     .ok_or(AppError::NotFound)?;
 
-    let (job_id_db, user_id_db, status_str, created_at_db, started_at_db, completed_at_db, error_message_db) = job;
+    let (
+        job_id_db,
+        user_id_db,
+        status_str,
+        created_at_db,
+        started_at_db,
+        completed_at_db,
+        error_message_db,
+    ) = job;
 
     let status = match status_str.as_str() {
         "queued" => JobStatus::Queued,
@@ -504,7 +548,8 @@ pub async fn delete_job(
 
     // Delete from Redis
     let job_queue = JobQueue::new(state.redis_client().clone());
-    job_queue.delete_job(job_id)
+    job_queue
+        .delete_job(job_id)
         .map_err(|e| AppError::Internal(format!("Failed to delete from Redis: {}", e)))?;
 
     // Delete files from encrypted volume
@@ -514,27 +559,29 @@ pub async fn delete_job(
 
     // Remove upload directory if it exists
     if upload_dir.exists() {
-        tokio::fs::remove_dir_all(&upload_dir)
-            .await
-            .map_err(|e| {
-                warn!("Failed to delete upload directory {:?}: {}", upload_dir, e);
-                AppError::Internal(format!("Failed to delete upload directory: {}", e))
-            })?;
+        tokio::fs::remove_dir_all(&upload_dir).await.map_err(|e| {
+            warn!("Failed to delete upload directory {:?}: {}", upload_dir, e);
+            AppError::Internal(format!("Failed to delete upload directory: {}", e))
+        })?;
         info!("Deleted upload directory: {:?}", upload_dir);
     }
 
     // Remove results directory if it exists
     if results_dir.exists() {
-        tokio::fs::remove_dir_all(&results_dir)
-            .await
-            .map_err(|e| {
-                warn!("Failed to delete results directory {:?}: {}", results_dir, e);
-                AppError::Internal(format!("Failed to delete results directory: {}", e))
-            })?;
+        tokio::fs::remove_dir_all(&results_dir).await.map_err(|e| {
+            warn!(
+                "Failed to delete results directory {:?}: {}",
+                results_dir, e
+            );
+            AppError::Internal(format!("Failed to delete results directory: {}", e))
+        })?;
         info!("Deleted results directory: {:?}", results_dir);
     }
 
-    info!("Successfully deleted job {} and all associated files", job_id);
+    info!(
+        "Successfully deleted job {} and all associated files",
+        job_id
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -642,11 +689,11 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
             // get_message() blocks until a message arrives (no timeout variant available)
             match pubsub.get_message() {
                 Ok(msg) => {
-                    if let Ok(payload) = msg.get_payload::<String>() {
-                        if tx.send(payload).is_err() {
-                            // Channel closed, stop polling
-                            break;
-                        }
+                    if let Ok(payload) = msg.get_payload::<String>()
+                        && tx.send(payload).is_err()
+                    {
+                        // Channel closed, stop polling
+                        break;
                     }
                 }
                 Err(e) => {
@@ -714,10 +761,6 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
     info!("WebSocket disconnected for job {}", job_id);
 }
 
-#[derive(Deserialize)]
-pub struct DownloadQuery {
-    format: Option<String>,
-}
 // Old insecure download endpoint removed - replaced with secure token-based download (Phase 6)
 // See download_results() below for the new implementation with password verification
 
@@ -748,33 +791,48 @@ pub async fn upload_chunk(
 
         match name.as_str() {
             "upload_id" => {
-                upload_id = Some(field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read upload_id: {}", e)))?);
+                upload_id = Some(field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read upload_id: {}", e))
+                })?);
             }
             "filename" => {
-                filename = Some(field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read filename: {}", e)))?);
+                filename = Some(field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read filename: {}", e))
+                })?);
             }
             "file_type" => {
-                file_type = Some(field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read file_type: {}", e)))?);
+                file_type = Some(field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read file_type: {}", e))
+                })?);
             }
             "chunk_index" => {
-                let text = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read chunk_index: {}", e)))?;
-                chunk_index = Some(text.parse()
-                    .map_err(|e| AppError::BadRequest(format!("Invalid chunk_index: {}", e)))?);
+                let text = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read chunk_index: {}", e))
+                })?;
+                chunk_index =
+                    Some(text.parse().map_err(|e| {
+                        AppError::BadRequest(format!("Invalid chunk_index: {}", e))
+                    })?);
             }
             "total_chunks" => {
-                let text = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read total_chunks: {}", e)))?;
-                total_chunks = Some(text.parse()
-                    .map_err(|e| AppError::BadRequest(format!("Invalid total_chunks: {}", e)))?);
+                let text = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read total_chunks: {}", e))
+                })?;
+                total_chunks =
+                    Some(text.parse().map_err(|e| {
+                        AppError::BadRequest(format!("Invalid total_chunks: {}", e))
+                    })?);
             }
             "chunk" => {
-                chunk_data = Some(field.bytes().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read chunk data: {}", e)))?
-                    .to_vec());
+                chunk_data = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|e| {
+                            AppError::BadRequest(format!("Failed to read chunk data: {}", e))
+                        })?
+                        .to_vec(),
+                );
             }
             _ => {
                 warn!("Unknown chunk upload field: {}", name);
@@ -783,31 +841,46 @@ pub async fn upload_chunk(
     }
 
     // Validate required fields
-    let upload_id = upload_id.ok_or_else(|| AppError::BadRequest("Missing upload_id".to_string()))?;
+    let upload_id =
+        upload_id.ok_or_else(|| AppError::BadRequest("Missing upload_id".to_string()))?;
     let filename = filename.ok_or_else(|| AppError::BadRequest("Missing filename".to_string()))?;
-    let file_type = file_type.ok_or_else(|| AppError::BadRequest("Missing file_type".to_string()))?;
-    let chunk_index = chunk_index.ok_or_else(|| AppError::BadRequest("Missing chunk_index".to_string()))?;
-    let total_chunks = total_chunks.ok_or_else(|| AppError::BadRequest("Missing total_chunks".to_string()))?;
-    let chunk_data = chunk_data.ok_or_else(|| AppError::BadRequest("Missing chunk data".to_string()))?;
+    let file_type =
+        file_type.ok_or_else(|| AppError::BadRequest("Missing file_type".to_string()))?;
+    let chunk_index =
+        chunk_index.ok_or_else(|| AppError::BadRequest("Missing chunk_index".to_string()))?;
+    let total_chunks =
+        total_chunks.ok_or_else(|| AppError::BadRequest("Missing total_chunks".to_string()))?;
+    let chunk_data =
+        chunk_data.ok_or_else(|| AppError::BadRequest("Missing chunk data".to_string()))?;
 
     // SECURITY: upload_id becomes a path component below - reject anything
     // that isn't a plain alnum/underscore/hyphen token before it touches disk.
-    validator.validate_upload_id(&upload_id)
+    validator
+        .validate_upload_id(&upload_id)
         .map_err(|e| AppError::BadRequest(format!("Invalid upload_id: {}", e)))?;
 
     // SECURITY: Validate chunk before writing to disk. The sanitized name
     // (not the raw `filename`) is what actually gets written to disk below.
     let chunk_bytes = axum::body::Bytes::from(chunk_data.clone());
-    let safe_filename = validator.validate_chunk(&filename, &chunk_bytes, chunk_index, total_chunks)
+    let safe_filename = validator
+        .validate_chunk(&filename, &chunk_bytes, chunk_index, total_chunks)
         .map_err(|e| AppError::BadRequest(format!("Invalid chunk: {}", e)))?;
 
-    info!("Chunk validated: {} ({}/{}, {} bytes)", filename, chunk_index + 1, total_chunks, chunk_data.len());
+    info!(
+        "Chunk validated: {} ({}/{}, {} bytes)",
+        filename,
+        chunk_index + 1,
+        total_chunks,
+        chunk_data.len()
+    );
 
     // Create upload session directory
     let upload_session_dir = state.upload_dir().join("chunks").join(&upload_id);
     tokio::fs::create_dir_all(&upload_session_dir)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to create upload session directory: {}", e)))?;
+        .map_err(|e| {
+            AppError::Internal(format!("Failed to create upload session directory: {}", e))
+        })?;
 
     // Save chunk to disk
     let chunk_filename = format!("{}_{:04}", safe_filename, chunk_index);
@@ -820,8 +893,13 @@ pub async fn upload_chunk(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to write chunk: {}", e)))?;
 
-    info!("Saved chunk {}/{} for file {} (upload_id: {})",
-        chunk_index + 1, total_chunks, filename, upload_id);
+    info!(
+        "Saved chunk {}/{} for file {} (upload_id: {})",
+        chunk_index + 1,
+        total_chunks,
+        filename,
+        upload_id
+    );
 
     // Store chunk metadata in Redis for tracking
     let metadata_key = format!("chunk:{}:{}:{}", upload_id, filename, chunk_index);
@@ -831,9 +909,11 @@ pub async fn upload_chunk(
         "chunk_index": chunk_index,
         "total_chunks": total_chunks,
         "size": chunk_data.len(),
-    }).to_string();
+    })
+    .to_string();
 
-    let mut conn = state.redis_client()
+    let mut conn = state
+        .redis_client()
         .get_connection()
         .map_err(|e| AppError::Internal(format!("Failed to get Redis connection: {}", e)))?;
 
@@ -865,12 +945,14 @@ pub async fn finalize_upload(
 
         match name.as_str() {
             "upload_id" => {
-                upload_id = Some(field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read upload_id: {}", e)))?);
+                upload_id = Some(field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read upload_id: {}", e))
+                })?);
             }
             "output_formats" => {
-                let data = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read output formats: {}", e)))?;
+                let data = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read output formats: {}", e))
+                })?;
 
                 // Parse format value (can be single format or comma-separated)
                 let formats: Vec<OutputFormat> = data
@@ -887,8 +969,9 @@ pub async fn finalize_upload(
                 output_formats.extend(formats);
             }
             "quality_threshold" => {
-                let data = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read quality threshold: {}", e)))?;
+                let data = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read quality threshold: {}", e))
+                })?;
 
                 // Parse quality threshold value
                 quality_threshold = match data.trim().to_lowercase().as_str() {
@@ -902,20 +985,25 @@ pub async fn finalize_upload(
                 };
             }
             "user_email" => {
-                let email = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read user email: {}", e)))?;
+                let email = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read user email: {}", e))
+                })?;
 
                 // Basic email validation
                 if !email.trim().is_empty() && email.contains('@') {
                     user_email = Some(email.trim().to_string());
-                    info!("Chunked upload will send download notification to {}", email.trim());
+                    info!(
+                        "Chunked upload will send download notification to {}",
+                        email.trim()
+                    );
                 } else {
                     warn!("Invalid email provided: {}", email);
                 }
             }
             "vcf_format" => {
-                let format = field.text().await
-                    .map_err(|e| AppError::BadRequest(format!("Failed to read VCF format: {}", e)))?;
+                let format = field.text().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read VCF format: {}", e))
+                })?;
 
                 // Validate and store VCF format preference
                 vcf_format = match format.trim().to_lowercase().as_str() {
@@ -944,16 +1032,19 @@ pub async fn finalize_upload(
         output_formats.push(OutputFormat::Vcf);
     }
 
-    let upload_id = upload_id.ok_or_else(|| AppError::BadRequest("Missing upload_id".to_string()))?;
+    let upload_id =
+        upload_id.ok_or_else(|| AppError::BadRequest("Missing upload_id".to_string()))?;
 
     // SECURITY: upload_id becomes a path component below - reject anything
     // that isn't a plain alnum/underscore/hyphen token before it touches disk.
-    FileValidator::new().validate_upload_id(&upload_id)
+    FileValidator::new()
+        .validate_upload_id(&upload_id)
         .map_err(|e| AppError::BadRequest(format!("Invalid upload_id: {}", e)))?;
 
     // PUBLIC PLATFORM: Require email for job ownership and notifications
-    let user_email = user_email
-        .ok_or_else(|| AppError::BadRequest("Email address is required for job submission".to_string()))?;
+    let user_email = user_email.ok_or_else(|| {
+        AppError::BadRequest("Email address is required for job submission".to_string())
+    })?;
 
     info!("Finalizing chunked upload: {}", upload_id);
     info!("Job output formats: {:?}", output_formats);
@@ -1010,7 +1101,7 @@ pub async fn finalize_upload(
     // Store hashed recovery codes in database
     for hash in &hashed_codes {
         sqlx::query(
-            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)"
+            "INSERT INTO genetics.genetics_recovery_codes (job_id, code_hash) VALUES ($1, $2)",
         )
         .bind(job_id)
         .bind(hash)
@@ -1019,7 +1110,11 @@ pub async fn finalize_upload(
         .map_err(|e| AppError::Internal(format!("Failed to store recovery code: {}", e)))?;
     }
 
-    info!("Generated {} recovery codes for job {}", plaintext_codes.len(), job_id);
+    info!(
+        "Generated {} recovery codes for job {}",
+        plaintext_codes.len(),
+        job_id
+    );
 
     // Create results directory for job
     let job_results_dir = state.results_dir().join(job_id.to_string());
@@ -1031,17 +1126,18 @@ pub async fn finalize_upload(
     let job_queue = JobQueue::new(state.redis_client().clone());
     let payload = JobPayload {
         job_id,
-        user_id: user_email.clone(),  // PUBLIC PLATFORM: Email is the user identifier
-        user_email: Some(user_email.clone()),  // Also store in email field for notifications
+        user_id: user_email.clone(), // PUBLIC PLATFORM: Email is the user identifier
+        user_email: Some(user_email.clone()), // Also store in email field for notifications
         upload_dir: job_upload_dir.to_string_lossy().to_string(),
         output_dir: job_results_dir.to_string_lossy().to_string(),
         output_formats: output_formats.clone(),
         quality_threshold,
-        chunked_upload: true,  // Phase 7.1: Worker will reassemble chunks
-        upload_session_id: Some(upload_id.clone()),  // Phase 7.1: For chunk reassembly
+        chunked_upload: true, // Phase 7.1: Worker will reassemble chunks
+        upload_session_id: Some(upload_id.clone()), // Phase 7.1: For chunk reassembly
     };
 
-    job_queue.enqueue(&payload)
+    job_queue
+        .enqueue(&payload)
         .map_err(|e| AppError::Internal(format!("Failed to enqueue job: {}", e)))?;
 
     info!("Job {} queued successfully (from chunked upload)", job_id);
@@ -1070,7 +1166,6 @@ pub struct DownloadRequest {
 #[derive(Debug, sqlx::FromRow)]
 struct JobDownloadRecord {
     id: Uuid,
-    user_id: String,
     status: String,
     result_path: Option<String>,
     metadata: Option<serde_json::Value>,
@@ -1127,31 +1222,80 @@ async fn validate_download_credentials(
     let job_id = job.id;
 
     if job.status != "completed" {
-        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, false, true, false, "job_not_found").await;
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            false,
+            true,
+            false,
+            "job_not_found",
+        )
+        .await;
         return Err(AppError::BadRequest("Job not completed".to_string()));
     }
 
-    if let Some(expires_at) = job.expires_at {
-        if expires_at < Utc::now() {
-            let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "job_expired").await;
-            return Err(AppError::BadRequest("Download link expired".to_string()));
-        }
+    if let Some(expires_at) = job.expires_at
+        && expires_at < Utc::now()
+    {
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            true,
+            true,
+            false,
+            "job_expired",
+        )
+        .await;
+        return Err(AppError::BadRequest("Download link expired".to_string()));
     }
 
     if job.download_attempts >= job.max_download_attempts {
-        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "max_attempts_exceeded").await;
-        return Err(AppError::BadRequest("Maximum download attempts exceeded".to_string()));
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            true,
+            true,
+            false,
+            "max_attempts_exceeded",
+        )
+        .await;
+        return Err(AppError::BadRequest(
+            "Maximum download attempts exceeded".to_string(),
+        ));
     }
 
     if let Some(last_attempt) = job.last_download_attempt {
         let since_last = Utc::now().signed_duration_since(last_attempt);
         if since_last.num_seconds() < 20 {
-            let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "rate_limited").await;
-            return Err(AppError::BadRequest("Too many attempts, please wait".to_string()));
+            let _ = record_download_attempt(
+                pool,
+                job_id,
+                &client_ip,
+                "unknown",
+                true,
+                true,
+                true,
+                false,
+                "rate_limited",
+            )
+            .await;
+            return Err(AppError::BadRequest(
+                "Too many attempts, please wait".to_string(),
+            ));
         }
     }
 
-    let password_hash = job.download_password_hash
+    let password_hash = job
+        .download_password_hash
         .as_ref()
         .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
 
@@ -1159,7 +1303,18 @@ async fn validate_download_credentials(
         .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
 
     if !password_valid {
-        let _ = record_download_attempt(pool, job_id, &client_ip, "unknown", true, true, true, false, "invalid_password").await;
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            true,
+            true,
+            false,
+            "invalid_password",
+        )
+        .await;
         return Err(AppError::BadRequest("Invalid password".to_string()));
     }
 
@@ -1181,10 +1336,14 @@ pub async fn download_results(
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
     let token = query_params.token;
-    let password = query_params.password
+    let password = query_params
+        .password
         .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
 
-    info!("Download attempt with token: {}...", &token[..8.min(token.len())]);
+    info!(
+        "Download attempt with token: {}...",
+        &token[..8.min(token.len())]
+    );
 
     let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
     let job_id = validated.id;
@@ -1195,7 +1354,7 @@ pub async fn download_results(
         "UPDATE genetics.genetics_jobs
          SET download_attempts = download_attempts + 1,
              last_download_attempt = NOW()
-         WHERE id = $1"
+         WHERE id = $1",
     )
     .bind(job_id)
     .execute(&mut *tx)
@@ -1216,10 +1375,12 @@ pub async fn download_results(
         true,
         true,
         "success",
-    ).await;
+    )
+    .await;
 
     // Get result file path
-    let result_path = validated.result_path
+    let result_path = validated
+        .result_path
         .ok_or_else(|| AppError::Internal("No result path found".to_string()))?;
 
     let file_path = PathBuf::from(&result_path);
@@ -1249,10 +1410,7 @@ pub async fn download_results(
     let body = axum::body::Body::from_stream(stream);
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_TYPE,
-        "application/zip".parse().unwrap(),
-    );
+    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
     headers.insert(
         header::CONTENT_LENGTH,
         file_size.to_string().parse().unwrap(),
@@ -1264,12 +1422,17 @@ pub async fn download_results(
             .unwrap(),
     );
 
-    info!("Serving download for job {}: {} ({} bytes)", job_id, file_name, file_size);
+    info!(
+        "Serving download for job {}: {} ({} bytes)",
+        job_id, file_name, file_size
+    );
 
     Ok((headers, body).into_response())
 }
 
 /// Record download attempt in audit table
+// Each argument maps to one audit column.
+#[allow(clippy::too_many_arguments)]
 async fn record_download_attempt(
     pool: &sqlx::PgPool,
     job_id: Uuid,
@@ -1315,14 +1478,16 @@ pub async fn get_visualization(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let token = query_params.token;
-    let password = query_params.password
+    let password = query_params
+        .password
         .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
 
     let validated = validate_download_credentials(&token, &password, state.db_pool()).await?;
 
-    let viz_data = validated.metadata
+    let viz_data = validated
+        .metadata
         .and_then(|m| m.get("visualization").cloned())
-        .ok_or_else(|| AppError::NotFound)?;
+        .ok_or(AppError::NotFound)?;
 
     info!("Serving visualization data for job {}", validated.id);
 
@@ -1338,14 +1503,15 @@ pub async fn get_visualization_by_job(
     Query(params): Query<HashMap<String, String>>,
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let password = params.get("password")
+    let password = params
+        .get("password")
         .ok_or_else(|| AppError::BadRequest("Password required".to_string()))?;
 
     let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
     let row: Option<(String, Option<String>, Option<serde_json::Value>)> = sqlx::query_as(
         "SELECT status, download_password_hash, metadata
-         FROM genetics.genetics_jobs WHERE id = $1"
+         FROM genetics.genetics_jobs WHERE id = $1",
     )
     .bind(job_id)
     .fetch_optional(&mut *tx)
@@ -1362,8 +1528,8 @@ pub async fn get_visualization_by_job(
         return Err(AppError::BadRequest("Job not completed".to_string()));
     }
 
-    let hash = password_hash
-        .ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
+    let hash =
+        password_hash.ok_or_else(|| AppError::Internal("No password hash found".to_string()))?;
 
     let valid = verify_password(password, &hash)
         .map_err(|e| AppError::Internal(format!("Password verification failed: {}", e)))?;
@@ -1374,9 +1540,12 @@ pub async fn get_visualization_by_job(
 
     let viz_data = metadata
         .and_then(|m| m.get("visualization").cloned())
-        .ok_or_else(|| AppError::NotFound)?;
+        .ok_or(AppError::NotFound)?;
 
-    info!("Serving visualization data for job {} (direct access)", job_id);
+    info!(
+        "Serving visualization data for job {} (direct access)",
+        job_id
+    );
 
     Ok(Json(viz_data))
 }
@@ -1385,6 +1554,28 @@ pub async fn get_visualization_by_job(
 // JOB MANAGEMENT ENDPOINTS
 // ==============================================================================
 
+/// (id, status, created_at, started_at, completed_at, expires_at, download_token)
+type PublicStatusRow = (
+    Uuid,
+    String,
+    chrono::DateTime<Utc>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<String>,
+);
+
+/// (id, status, user_email, download_token, completed_at, expires_at, last_email_resent_at)
+type ResendEmailRow = (
+    Uuid,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+);
+
 /// Public job status lookup (no auth required, UUID is the secret)
 pub async fn get_job_public_status(
     State(state): State<AppState>,
@@ -1392,16 +1583,14 @@ pub async fn get_job_public_status(
 ) -> Result<Json<JobPublicStatusResponse>, AppError> {
     let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
-    let row: Option<(Uuid, String, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>,
-        Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>, Option<String>)> =
-        sqlx::query_as(
-            "SELECT id, status, created_at, started_at, completed_at, expires_at, download_token
-             FROM genetics.genetics_jobs WHERE id = $1"
-        )
-        .bind(job_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+    let row: Option<PublicStatusRow> = sqlx::query_as(
+        "SELECT id, status, created_at, started_at, completed_at, expires_at, download_token
+             FROM genetics.genetics_jobs WHERE id = $1",
+    )
+    .bind(job_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
 
     tx.commit()
         .await
@@ -1412,7 +1601,7 @@ pub async fn get_job_public_status(
 
     let has_download = download_token.is_some()
         && status == "completed"
-        && expires_at.map_or(false, |exp| exp > Utc::now());
+        && expires_at.is_some_and(|exp| exp > Utc::now());
 
     Ok(Json(JobPublicStatusResponse {
         job_id: id,
@@ -1433,9 +1622,7 @@ pub async fn resend_email(
     // Fetch job details
     let (mut tx, owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
-    let row: Option<(Uuid, String, Option<String>, Option<String>,
-        Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>,
-        Option<chrono::DateTime<Utc>>)> =
+    let row: Option<ResendEmailRow> =
         sqlx::query_as(
             "SELECT id, status, user_email, download_token, completed_at, expires_at, last_email_resent_at
              FROM genetics.genetics_jobs WHERE id = $1"
@@ -1456,10 +1643,10 @@ pub async fn resend_email(
     if status != "completed" {
         return Err(AppError::BadRequest("Job is not completed yet".to_string()));
     }
-    if let Some(exp) = expires_at {
-        if exp < Utc::now() {
-            return Err(AppError::BadRequest("Job has expired".to_string()));
-        }
+    if let Some(exp) = expires_at
+        && exp < Utc::now()
+    {
+        return Err(AppError::BadRequest("Job has expired".to_string()));
     }
     let user_email = user_email
         .ok_or_else(|| AppError::BadRequest("No email address on file for this job".to_string()))?;
@@ -1499,7 +1686,7 @@ pub async fn resend_email(
         "UPDATE genetics.genetics_jobs
          SET download_password_hash = $1, download_attempts = 0,
              last_download_attempt = NULL, last_email_resent_at = NOW()
-         WHERE id = $2"
+         WHERE id = $2",
     )
     .bind(&new_hash)
     .bind(job_id)
@@ -1517,22 +1704,26 @@ pub async fn resend_email(
     let email_sender = crate::email::EmailSender::from_env()
         .map_err(|e| AppError::Internal(format!("Failed to initialize email sender: {}", e)))?;
 
-    email_sender.send_download_notification(
-        job_id,
-        &user_email,
-        &download_token,
-        &new_password,
-        &completed_at,
-        &expires_at,
-    ).await
-    .map_err(|e| AppError::Internal(format!("Failed to send email: {}", e)))?;
+    email_sender
+        .send_download_notification(
+            job_id,
+            &user_email,
+            &download_token,
+            &new_password,
+            &completed_at,
+            &expires_at,
+        )
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to send email: {}", e)))?;
 
     info!("Resent download email for job {} to {}", job_id, user_email);
 
     let next_available = Utc::now() + chrono::Duration::seconds(300);
     Ok(Json(ResendEmailResponse {
         success: true,
-        message: "A new download email has been sent. Any previously sent passwords are no longer valid.".to_string(),
+        message:
+            "A new download email has been sent. Any previously sent passwords are no longer valid."
+                .to_string(),
         next_resend_available_at: Some(next_available),
     }))
 }
@@ -1545,13 +1736,12 @@ pub async fn delete_job_with_recovery(
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Fetch job
     let (mut tx, owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
-    let row: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, status FROM genetics.genetics_jobs WHERE id = $1"
-    )
-    .bind(job_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
+    let row: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT id, status FROM genetics.genetics_jobs WHERE id = $1")
+            .bind(job_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(format!("Database query failed: {}", e)))?;
     tx.commit()
         .await
         .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;
@@ -1559,19 +1749,23 @@ pub async fn delete_job_with_recovery(
     let (_id, status) = row.ok_or(AppError::NotFound)?;
 
     if status == "user_deleted" {
-        return Err(AppError::BadRequest("This job has already been deleted".to_string()));
+        return Err(AppError::BadRequest(
+            "This job has already been deleted".to_string(),
+        ));
     }
 
     // Normalize the provided recovery code
     let normalized_code = normalize_recovery_code(&body.recovery_code);
     if normalized_code.len() != 12 {
-        return Err(AppError::BadRequest("Invalid recovery code format".to_string()));
+        return Err(AppError::BadRequest(
+            "Invalid recovery code format".to_string(),
+        ));
     }
 
     // Fetch all unused recovery codes for this job
     let codes: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT id, code_hash FROM genetics.genetics_recovery_codes
-         WHERE job_id = $1 AND used = false"
+         WHERE job_id = $1 AND used = false",
     )
     .bind(job_id)
     .fetch_all(state.db_pool())
@@ -1600,7 +1794,7 @@ pub async fn delete_job_with_recovery(
 
     // Mark the recovery code as used
     sqlx::query(
-        "UPDATE genetics.genetics_recovery_codes SET used = true, used_at = NOW() WHERE id = $1"
+        "UPDATE genetics.genetics_recovery_codes SET used = true, used_at = NOW() WHERE id = $1",
     )
     .bind(matched_id)
     .execute(state.db_pool())
@@ -1609,13 +1803,11 @@ pub async fn delete_job_with_recovery(
 
     // Mark the job as user_deleted
     let mut tx = db::scoped_tx_for_user(state.db_pool(), &owner).await?;
-    sqlx::query(
-        "UPDATE genetics.genetics_jobs SET status = 'user_deleted' WHERE id = $1"
-    )
-    .bind(job_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| AppError::Internal(format!("Failed to delete job: {}", e)))?;
+    sqlx::query("UPDATE genetics.genetics_jobs SET status = 'user_deleted' WHERE id = $1")
+        .bind(job_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to delete job: {}", e)))?;
     tx.commit()
         .await
         .map_err(|e| AppError::Internal(format!("Failed to commit: {}", e)))?;

@@ -13,14 +13,14 @@ use anyhow::{Context, Result};
 use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Securely delete a file using DoD 5220.22-M standard (7-pass overwrite)
 ///
 /// Pass pattern:
 /// 1. 0x00 (all zeros)
 /// 2. 0xFF (all ones)
-/// 3-6. Random data
+///    3-6. Random data
 /// 7. 0x00 (all zeros)
 ///
 /// After overwriting, the file is unlinked from the filesystem.
@@ -28,8 +28,7 @@ pub async fn secure_delete_file(path: &Path) -> Result<()> {
     info!("Securely deleting file: {:?}", path);
 
     // Get file size
-    let metadata = std::fs::metadata(path)
-        .context("Failed to get file metadata")?;
+    let metadata = std::fs::metadata(path).context("Failed to get file metadata")?;
     let size = metadata.len() as usize;
 
     debug!("File size: {} bytes, beginning 7-pass overwrite", size);
@@ -63,7 +62,7 @@ pub async fn secure_delete_file(path: &Path) -> Result<()> {
         };
 
         // Create buffer with pattern
-        let buffer = if pass >= 2 && pass <= 5 {
+        let buffer = if (2..=5).contains(&pass) {
             // Random data: generate new random bytes for each chunk
             vec![0u8; size]
                 .into_iter()
@@ -83,16 +82,14 @@ pub async fn secure_delete_file(path: &Path) -> Result<()> {
             .context("Failed to write overwrite pattern")?;
 
         // Sync to disk (ensure data is written, not just buffered)
-        file.sync_all()
-            .context("Failed to sync file to disk")?;
+        file.sync_all().context("Failed to sync file to disk")?;
     }
 
     // Close file handle
     drop(file);
 
     // Unlink from filesystem
-    std::fs::remove_file(path)
-        .context("Failed to remove file after secure overwrite")?;
+    std::fs::remove_file(path).context("Failed to remove file after secure overwrite")?;
 
     info!("File securely deleted: {:?}", path);
     Ok(())
@@ -104,7 +101,7 @@ pub async fn secure_delete_directory(path: &Path) -> Result<()> {
 
     // Recursively delete all files
     for entry in walkdir::WalkDir::new(path)
-        .contents_first(true)  // Files before directories
+        .contents_first(true) // Files before directories
         .into_iter()
         .filter_map(|e| e.ok())
     {
@@ -114,14 +111,12 @@ pub async fn secure_delete_directory(path: &Path) -> Result<()> {
             secure_delete_file(entry_path).await?;
         } else if entry_path.is_dir() && entry_path != path {
             // Remove empty directories
-            std::fs::remove_dir(entry_path)
-                .context("Failed to remove directory")?;
+            std::fs::remove_dir(entry_path).context("Failed to remove directory")?;
         }
     }
 
     // Remove the root directory
-    std::fs::remove_dir(path)
-        .context("Failed to remove root directory")?;
+    std::fs::remove_dir(path).context("Failed to remove root directory")?;
 
     info!("Directory securely deleted: {:?}", path);
     Ok(())

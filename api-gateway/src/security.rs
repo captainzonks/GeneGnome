@@ -11,18 +11,14 @@
 
 use anyhow::{Context, Result};
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2, Algorithm, Params, Version,
+    Algorithm, Argon2, Params, Version,
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use rand::Rng;
+use rand::RngExt;
 
 // ==============================================================================
 // CONSTANTS
 // ==============================================================================
-
-/// Token length in bytes (32 bytes = 256 bits)
-const TOKEN_BYTES: usize = 32;
 
 /// Password length in characters
 const PASSWORD_LENGTH: usize = 16;
@@ -38,36 +34,6 @@ const RECOVERY_CODE_LENGTH: usize = 12;
 
 /// Number of recovery codes generated per job
 pub const RECOVERY_CODE_COUNT: usize = 8;
-
-// ==============================================================================
-// TOKEN GENERATION
-// ==============================================================================
-
-/// Generates a cryptographically secure random token for download URLs
-///
-/// Returns a URL-safe base64-encoded string of 32 random bytes (256 bits of entropy).
-/// The resulting string is approximately 43 characters long.
-///
-/// # Examples
-///
-/// ```
-/// let token = generate_download_token()?;
-/// assert_eq!(token.len(), 43); // Base64 URL-safe encoding of 32 bytes
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if the random number generator fails (extremely rare)
-pub fn generate_download_token() -> Result<String> {
-    let mut rng = rand::thread_rng();
-    let mut bytes = [0u8; TOKEN_BYTES];
-    rng.fill(&mut bytes);
-
-    // Encode to URL-safe base64 without padding
-    let token = URL_SAFE_NO_PAD.encode(&bytes);
-
-    Ok(token)
-}
 
 // ==============================================================================
 // PASSWORD GENERATION
@@ -91,10 +57,10 @@ pub fn generate_download_token() -> Result<String> {
 ///
 /// Returns an error if the random number generator fails (extremely rare)
 pub fn generate_download_password() -> Result<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let password: String = (0..PASSWORD_LENGTH)
         .map(|_| {
-            let idx = rng.gen_range(0..PASSWORD_CHARSET.len());
+            let idx = rng.random_range(0..PASSWORD_CHARSET.len());
             PASSWORD_CHARSET[idx] as char
         })
         .collect();
@@ -135,19 +101,15 @@ pub fn generate_download_password() -> Result<String> {
 /// - Salt generation fails (extremely rare)
 /// - Password hashing fails (extremely rare)
 pub fn hash_password(password: &str) -> Result<String> {
-    // Generate a random salt
-    let salt = SaltString::generate(&mut OsRng);
-
     // Configure Argon2id with secure parameters
     // Memory: 47104 KiB (46 MiB), Iterations: 3, Parallelism: 4
-    let params = Params::new(47104, 3, 4, None)
-        .context("Failed to create Argon2 parameters")?;
+    let params = Params::new(47104, 3, 4, None).context("Failed to create Argon2 parameters")?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    // Hash the password
+    // Hash the password (a random 16-byte salt is generated per call)
     let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .context("Failed to hash password")?
         .to_string();
 
@@ -176,14 +138,13 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// - The hash string is malformed
 /// - Password verification fails
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
-    let parsed_hash = PasswordHash::new(hash)
-        .context("Failed to parse password hash")?;
+    let parsed_hash = PasswordHash::new(hash).context("Failed to parse password hash")?;
 
     let argon2 = Argon2::default();
 
     match argon2.verify_password(password.as_bytes(), &parsed_hash) {
         Ok(()) => Ok(true),
-        Err(argon2::password_hash::Error::Password) => Ok(false),
+        Err(argon2::password_hash::Error::PasswordInvalid) => Ok(false),
         Err(e) => Err(anyhow::anyhow!("Password verification error: {}", e)),
     }
 }
@@ -196,10 +157,10 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 ///
 /// Returns a formatted string like "ABCD-1234-EFGH".
 fn generate_recovery_code() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let raw: String = (0..RECOVERY_CODE_LENGTH)
         .map(|_| {
-            let idx = rng.gen_range(0..RECOVERY_CODE_CHARSET.len());
+            let idx = rng.random_range(0..RECOVERY_CODE_CHARSET.len());
             RECOVERY_CODE_CHARSET[idx] as char
         })
         .collect();
@@ -242,21 +203,6 @@ pub fn generate_recovery_codes() -> Result<(Vec<String>, Vec<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_generate_download_token() {
-        let token = generate_download_token().unwrap();
-
-        // Token should be URL-safe base64 of 32 bytes (43 chars)
-        assert_eq!(token.len(), 43);
-
-        // Should only contain URL-safe base64 characters
-        assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
-
-        // Two tokens should be different
-        let token2 = generate_download_token().unwrap();
-        assert_ne!(token, token2);
-    }
 
     #[test]
     fn test_generate_download_password() {
@@ -311,6 +257,17 @@ mod tests {
 
         // Case sensitivity matters
         assert!(!verify_password("correctpassword123!", &hash).unwrap());
+    }
+
+    /// Hashes already stored in the database must survive dependency upgrades.
+    /// This one was produced by argon2 0.5.3 with the production parameters.
+    #[test]
+    fn verifies_hash_created_by_argon2_0_5() {
+        let stored = "$argon2id$v=19$m=47104,t=3,p=4$7xKNs705tyilPIp2aPCZVw$\
+                      eDbVJTR5w/9ElAMoGwEofifSoaf+DEF4EW7az8w+c5U";
+
+        assert!(verify_password("compat-check-input", stored).unwrap());
+        assert!(!verify_password("some-other-input", stored).unwrap());
     }
 
     #[test]

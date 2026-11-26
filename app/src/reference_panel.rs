@@ -9,8 +9,7 @@
 // ==============================================================================
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params, OptionalExtension};
-use serde_json;
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use tracing::info;
 
@@ -24,15 +23,17 @@ pub struct ReferencePanelReader {
 impl ReferencePanelReader {
     /// Open reference panel database
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let conn = Connection::open(path.as_ref())
-            .context("Failed to open reference panel database")?;
+        let conn =
+            Connection::open(path.as_ref()).context("Failed to open reference panel database")?;
 
         Ok(Self { conn })
     }
 
     /// Get metadata from database
     pub fn get_metadata(&self, key: &str) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare("SELECT value FROM metadata WHERE key = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM metadata WHERE key = ?1")?;
         let result = stmt.query_row(params![key], |row| row.get(0)).optional()?;
         Ok(result)
     }
@@ -45,33 +46,38 @@ impl ReferencePanelReader {
                     sample_genotypes
              FROM reference_variants
              WHERE chromosome = ?1
-             ORDER BY position"
+             ORDER BY position",
         )?;
 
         let variant_iter = stmt.query_map(params![chromosome], |row| {
             let sample_genotypes_json: String = row.get(10)?;
 
             // Deserialize as a map with sample IDs as keys (e.g., {"samp1": "0|0", "samp2": "0|1", ...})
-            let sample_map: std::collections::HashMap<String, String> = serde_json::from_str(&sample_genotypes_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
-                    10,
-                    rusqlite::types::Type::Text,
-                    Box::new(e)
-                ))?;
+            let sample_map: std::collections::HashMap<String, String> =
+                serde_json::from_str(&sample_genotypes_json).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
 
             // Extract genotypes in order: samp1, samp2, ..., samp50
             let mut sample_genotypes = Vec::with_capacity(50);
             for i in 1..=50 {
                 let sample_id = format!("samp{}", i);
-                let genotype = sample_map.get(&sample_id)
-                    .ok_or_else(|| rusqlite::Error::FromSqlConversionFailure(
-                        10,
-                        rusqlite::types::Type::Text,
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Missing genotype for {}", sample_id)
-                        ))
-                    ))?
+                let genotype = sample_map
+                    .get(&sample_id)
+                    .ok_or_else(|| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            10,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Missing genotype for {}", sample_id),
+                            )),
+                        )
+                    })?
                     .clone();
                 sample_genotypes.push(genotype);
             }
@@ -107,14 +113,18 @@ impl ReferencePanelReader {
 
     /// Get total variant count across all chromosomes
     pub fn get_total_variant_count(&self) -> Result<usize> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM reference_variants")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM reference_variants")?;
         let count: usize = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
     /// Get variant count for a specific chromosome
     pub fn get_chromosome_variant_count(&self, chromosome: u8) -> Result<usize> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM reference_variants WHERE chromosome = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM reference_variants WHERE chromosome = ?1")?;
         let count: usize = stmt.query_row(params![chromosome], |row| row.get(0))?;
         Ok(count)
     }
@@ -126,7 +136,9 @@ impl ReferencePanelReader {
         let _count: usize = stmt.query_row([], |row| row.get(0))?;
 
         // Check that reference_variants table exists
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM reference_variants")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM reference_variants")?;
         let count: usize = stmt.query_row([], |row| row.get(0))?;
 
         info!("Reference panel database validated: {} variants", count);
@@ -138,8 +150,6 @@ impl ReferencePanelReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::tempdir;
 
     #[test]
     fn test_reference_panel_structure() {

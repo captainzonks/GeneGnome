@@ -10,12 +10,11 @@
 // ==============================================================================
 
 use anyhow::{Context, Result};
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2, Algorithm, Params, Version,
-};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use rand::Rng;
+#[cfg(test)]
+use argon2::password_hash::{PasswordVerifier, phc::PasswordHash};
+use argon2::{Algorithm, Argon2, Params, Version, password_hash::PasswordHasher};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use rand::RngExt;
 
 // ==============================================================================
 // CONSTANTS
@@ -50,12 +49,12 @@ const PASSWORD_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxy
 ///
 /// Returns an error if the random number generator fails (extremely rare)
 pub fn generate_download_token() -> Result<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut bytes = [0u8; TOKEN_BYTES];
     rng.fill(&mut bytes);
 
     // Encode to URL-safe base64 without padding
-    let token = URL_SAFE_NO_PAD.encode(&bytes);
+    let token = URL_SAFE_NO_PAD.encode(bytes);
 
     Ok(token)
 }
@@ -82,10 +81,10 @@ pub fn generate_download_token() -> Result<String> {
 ///
 /// Returns an error if the random number generator fails (extremely rare)
 pub fn generate_download_password() -> Result<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let password: String = (0..PASSWORD_LENGTH)
         .map(|_| {
-            let idx = rng.gen_range(0..PASSWORD_CHARSET.len());
+            let idx = rng.random_range(0..PASSWORD_CHARSET.len());
             PASSWORD_CHARSET[idx] as char
         })
         .collect();
@@ -126,19 +125,15 @@ pub fn generate_download_password() -> Result<String> {
 /// - Salt generation fails (extremely rare)
 /// - Password hashing fails (extremely rare)
 pub fn hash_password(password: &str) -> Result<String> {
-    // Generate a random salt
-    let salt = SaltString::generate(&mut OsRng);
-
     // Configure Argon2id with secure parameters
     // Memory: 47104 KiB (46 MiB), Iterations: 3, Parallelism: 4
-    let params = Params::new(47104, 3, 4, None)
-        .context("Failed to create Argon2 parameters")?;
+    let params = Params::new(47104, 3, 4, None).context("Failed to create Argon2 parameters")?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    // Hash the password
+    // Hash the password (a random 16-byte salt is generated per call)
     let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .context("Failed to hash password")?
         .to_string();
 
@@ -166,15 +161,15 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// Returns an error if:
 /// - The hash string is malformed
 /// - Password verification fails
+#[cfg(test)]
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
-    let parsed_hash = PasswordHash::new(hash)
-        .context("Failed to parse password hash")?;
+    let parsed_hash = PasswordHash::new(hash).context("Failed to parse password hash")?;
 
     let argon2 = Argon2::default();
 
     match argon2.verify_password(password.as_bytes(), &parsed_hash) {
         Ok(()) => Ok(true),
-        Err(argon2::password_hash::Error::Password) => Ok(false),
+        Err(argon2::password_hash::Error::PasswordInvalid) => Ok(false),
         Err(e) => Err(anyhow::anyhow!("Password verification error: {}", e)),
     }
 }
@@ -195,7 +190,11 @@ mod tests {
         assert_eq!(token.len(), 43);
 
         // Should only contain URL-safe base64 characters
-        assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        );
 
         // Two tokens should be different
         let token2 = generate_download_token().unwrap();
