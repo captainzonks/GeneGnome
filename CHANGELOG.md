@@ -28,6 +28,13 @@ ADR-029.
 
 - Merge genotyped calls correctly and keep missing calls missing (#61)
 
+### Changed
+
+- `dosage` is now empty (null) in Parquet and SQLite output, and VCF shows
+  `.|.:.:.`, where a sample has no usable call; its source is `Missing`.
+- Results produced by earlier releases show wrong values for some of the
+  user's variants. Submit the job again to regenerate them.
+
 ## [1.5.8] - 2026-11-26
 
 ### Fixed
