@@ -33,7 +33,6 @@ class ProgressMonitor {
         this.completionTime = document.getElementById('completionTime');
         this.expiryTime = document.getElementById('expiryTime');
         this.formatCount = document.getElementById('formatCount');
-        this.downloadLinks = document.getElementById('downloadLinks');
     }
 
     startMonitoring(jobId) {
@@ -206,145 +205,9 @@ class ProgressMonitor {
             this.expiryTime.textContent = expiryDate.toLocaleString();
         }
 
-        // Update format count
-        const formats = data.output_formats || ['parquet'];
-        this.formatCount.textContent = formats.length;
-
-        // Generate download links
-        this.generateDownloadLinks(formats);
-    }
-
-    generateDownloadLinks(formats) {
-        this.downloadLinks.innerHTML = '';
-
-        const formatInfo = {
-            parquet: { name: 'Apache Parquet', icon: '📦', desc: 'Columnar format for analysis', size: '~240 MB' },
-            json: { name: 'JSON', icon: '{ }', desc: 'Human-readable format', size: '~2.5 GB' },
-            sqlite: { name: 'SQLite Database', icon: '🗄️', desc: 'Queryable database file', size: '~1.3 GB' },
-            vcf: { name: 'VCF (Gzipped)', icon: '🧬', desc: 'Standard genomics format', size: '~720 MB' }
-        };
-
-        formats.forEach(format => {
-            const info = formatInfo[format] || { name: format.toUpperCase(), icon: '📄', desc: '', size: '' };
-
-            const link = document.createElement('a');
-            link.className = 'download-link';
-            link.href = `${this.API_BASE}/api/genetics/results/${this.jobId}?format=${format}`;
-            link.download = `genetics_data.${format}`;
-            link.dataset.format = format;
-
-            link.innerHTML = `
-                <div class="download-info">
-                    <div class="download-icon">${info.icon}</div>
-                    <div class="download-details">
-                        <strong>${info.name}</strong>
-                        <p>${info.desc} <span class="file-size">${info.size}</span></p>
-                    </div>
-                </div>
-                <div class="download-action">
-                    <svg class="btn-icon download-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    <svg class="btn-icon loading-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-                        <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
-                        <path d="M12 2a10 10 0 0 1 10 10" opacity="0.75"></path>
-                    </svg>
-                    <span class="download-status"></span>
-                </div>
-            `;
-
-            // Add click handler for visual feedback
-            link.addEventListener('click', (e) => {
-                console.log('Download link clicked:', format, info);
-                // Don't prevent default - let browser handle download
-                this.handleDownloadClick(link, info);
-            });
-
-            this.downloadLinks.appendChild(link);
-            console.log('Download link created for:', format);
-        });
-    }
-
-    handleDownloadClick(link, info) {
-        console.log('handleDownloadClick called with:', info);
-
-        // Show loading state
-        link.classList.add('downloading');
-
-        const downloadIcon = link.querySelector('.download-icon-svg');
-        const spinner = link.querySelector('.loading-spinner');
-        const status = link.querySelector('.download-status');
-
-        console.log('DOM elements found:', {
-            downloadIcon: !!downloadIcon,
-            spinner: !!spinner,
-            status: !!status
-        });
-
-        if (downloadIcon) {
-            downloadIcon.style.display = 'none';
-            console.log('Download icon hidden');
-        }
-        if (spinner) {
-            spinner.style.display = 'block';
-            spinner.style.animation = 'spin 1s linear infinite';
-            console.log('Spinner shown');
-        }
-        if (status) {
-            status.textContent = 'Preparing...';
-            console.log('Status text set');
-        }
-
-        // Show notification
-        this.showDownloadNotification(info);
-
-        // Reset after delay (browser will show download dialog)
-        // Large files take 10-20 seconds to start
-        setTimeout(() => {
-            if (downloadIcon) downloadIcon.style.display = 'block';
-            if (spinner) spinner.style.display = 'none';
-            if (status) status.textContent = '';
-            link.classList.remove('downloading');
-        }, 30000); // 30 seconds should be enough for download to start
-    }
-
-    showDownloadNotification(info) {
-        console.log('showDownloadNotification called with:', info);
-
-        // Create or update notification toast
-        let toast = document.getElementById('download-toast');
-
-        if (!toast) {
-            console.log('Creating new toast element');
-            toast = document.createElement('div');
-            toast.id = 'download-toast';
-            toast.className = 'download-toast';
-            document.body.appendChild(toast);
-        } else {
-            console.log('Reusing existing toast element');
-        }
-
-        toast.innerHTML = `
-            <div class="toast-content">
-                <div class="toast-icon">⏳</div>
-                <div class="toast-message">
-                    <strong>Preparing download...</strong>
-                    <p>Your ${info.name} file (${info.size}) is being prepared. The download will start shortly.</p>
-                </div>
-            </div>
-        `;
-
-        console.log('Toast HTML set, adding show class');
-        toast.classList.add('show');
-        console.log('Toast classes:', toast.className);
-
-        // Hide after 8 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            console.log('Toast hidden after timeout');
-        }, 8000);
+        // Update format count (unknown if the job details could not be fetched)
+        const formats = data.output_formats || [];
+        this.formatCount.textContent = formats.length || '-';
     }
 
     async handleError(errorMessage) {

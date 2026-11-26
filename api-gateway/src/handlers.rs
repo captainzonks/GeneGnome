@@ -5,7 +5,7 @@
 // Author: Matt Barham
 // Created: 2025-11-06
 // Modified: 2026-11-26
-// Version: 1.1.0
+// Version: 1.2.0
 // ==============================================================================
 
 use axum::{
@@ -21,7 +21,7 @@ use chrono::Utc;
 use futures_util::sink::SinkExt;
 use redis::Commands;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -448,13 +448,7 @@ pub async fn get_job_status(
     let (job_id_db, status_str, created_at_db, started_at_db, completed_at_db, error_message_db) =
         job;
 
-    let status = match status_str.as_str() {
-        "queued" => JobStatus::Queued,
-        "processing" => JobStatus::Processing,
-        "complete" => JobStatus::Complete,
-        "failed" => JobStatus::Failed,
-        _ => JobStatus::Queued,
-    };
+    let status = job_status_from_db(&status_str);
 
     // Calculate progress (simplified)
     let progress = match status {
@@ -464,14 +458,13 @@ pub async fn get_job_status(
         JobStatus::Failed => 0.0,
     };
 
-    // Query output formats from genetics_files table
-    let output_formats: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT LOWER(file_type) FROM genetics_files WHERE job_id = $1 ORDER BY LOWER(file_type)"
-    )
-    .bind(job_id)
-    .fetch_all(&mut *tx)
-    .await
-    .unwrap_or_default();
+    let file_names: Vec<String> =
+        sqlx::query_scalar("SELECT file_name FROM genetics_files WHERE job_id = $1")
+            .bind(job_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+    let output_formats = output_format_names(file_names.iter().map(String::as_str));
 
     tx.commit()
         .await
@@ -492,6 +485,34 @@ pub async fn get_job_status(
             pgs_file: "scores.txt".to_string(),
         },
     }))
+}
+
+/// Map the status stored in the database to the API's status
+fn job_status_from_db(status: &str) -> JobStatus {
+    match status {
+        "processing" => JobStatus::Processing,
+        "completed" => JobStatus::Complete,
+        "failed" => JobStatus::Failed,
+        _ => JobStatus::Queued,
+    }
+}
+
+/// The output formats present among a job's result files, sorted. Other files,
+/// such as the polygenic score table, belong to no format.
+fn output_format_names<'a>(file_names: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let formats: BTreeSet<&str> = file_names
+        .into_iter()
+        .filter_map(|name| {
+            [
+                (".parquet", "parquet"),
+                (".db", "sqlite"),
+                (".vcf.gz", "vcf"),
+            ]
+            .into_iter()
+            .find_map(|(suffix, format)| name.ends_with(suffix).then_some(format))
+        })
+        .collect();
+    formats.into_iter().map(String::from).collect()
 }
 
 /// Delete job endpoint
@@ -1867,4 +1888,34 @@ pub async fn delete_job_with_recovery(
         "success": true,
         "message": "Your data has been scheduled for deletion and will be permanently removed shortly."
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn completed_jobs_report_as_complete() {
+        // The worker writes these status strings
+        for (stored, expected) in [
+            ("pending", JobStatus::Queued),
+            ("processing", JobStatus::Processing),
+            ("completed", JobStatus::Complete),
+            ("failed", JobStatus::Failed),
+        ] {
+            assert_eq!(job_status_from_db(stored), expected, "{stored}");
+        }
+    }
+
+    #[test]
+    fn output_formats_come_from_result_file_names() {
+        let files = [
+            "GenomicData_1_51samples.vcf.gz",
+            "GenomicData_1_51samples_chr1.parquet",
+            "GenomicData_1_51samples.db",
+            "pgs_scores.csv",
+        ];
+        assert_eq!(output_format_names(files), ["parquet", "sqlite", "vcf"]);
+        assert!(output_format_names(["pgs_scores.csv"]).is_empty());
+    }
 }
