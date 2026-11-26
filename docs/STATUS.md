@@ -1,5 +1,8 @@
 # Genetics Processor - Project Status
 
+> **Superseded.** This is a point-in-time record from 2025-11-17 and does not
+> describe the current code. See [ROADMAP.md](../ROADMAP.md).
+
 **Last Updated:** 2025-11-17
 **Version:** 0.9.0 (Pre-Release)
 **Status:** ✅ **CORE COMPLETE** | ⚠️ **SECURITY PENDING**
