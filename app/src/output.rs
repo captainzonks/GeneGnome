@@ -4,8 +4,8 @@
 // Description: Generate genetic analysis results in multiple formats for web delivery
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-09-27
-// Version: 1.2.1
+// Modified: 2026-11-26
+// Version: 1.3.0
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -31,6 +31,9 @@ use crate::parsers::PgsDataset;
 /// version so downloaded files record which processor build produced them.
 const VCF_SOURCE: &str = concat!("##source=genetics-processor-v", env!("CARGO_PKG_VERSION"));
 use crate::models::{DataSource, MergedVariant, MultiSampleVariant, SampleData};
+
+/// File name of the polygenic score table added to the results
+const PGS_CSV_NAME: &str = "pgs_scores.csv";
 
 /// Supported output formats for web delivery
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1652,7 +1655,7 @@ impl OutputGenerator {
                     )
                     .context("Failed to create variants table")?;
 
-                    // Create PGS tables (empty for now)
+                    // PGS tables, filled by write_pgs_scores when scores were uploaded
                     conn.execute(
                         "CREATE TABLE pgs_unscaled (
                             sample_id TEXT NOT NULL,
@@ -2353,6 +2356,55 @@ impl OutputGenerator {
         Ok(())
     }
 
+    /// Add uploaded polygenic scores to the streaming output: always as
+    /// `pgs_scores.csv`, and in the SQLite tables when SQLite was requested.
+    /// Call between initialize and finalize. Returns the CSV path.
+    pub fn write_pgs_scores(&mut self, scores: &PgsDataset) -> Result<PathBuf> {
+        let state = self
+            .streaming_state
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Streaming not initialized."))?;
+
+        let z_scores: HashMap<(&str, &str), f64> = scores
+            .scaled
+            .iter()
+            .map(|r| ((r.sample_id.as_str(), r.label.as_str()), r.value))
+            .collect();
+
+        let csv_path = self.output_dir.join(PGS_CSV_NAME);
+        let mut writer =
+            csv::Writer::from_path(&csv_path).context("Failed to create PGS scores CSV")?;
+        writer.write_record(["sample_id", "trait_label", "value", "z_score"])?;
+        for record in &scores.unscaled {
+            let z_score = z_scores
+                .get(&(record.sample_id.as_str(), record.label.as_str()))
+                .context("Score has no scaled counterpart")?;
+            writer.serialize((&record.sample_id, &record.label, record.value, z_score))?;
+        }
+        writer.flush().context("Failed to write PGS scores CSV")?;
+
+        if let Some(conn) = state.sqlite_conn.as_mut() {
+            let tx = conn.transaction()?;
+            for (table, records) in [
+                ("pgs_unscaled", &scores.unscaled),
+                ("pgs_scaled", &scores.scaled),
+            ] {
+                let mut insert = tx.prepare(&format!(
+                    "INSERT INTO {table} (sample_id, trait_label, value) VALUES (?1, ?2, ?3)"
+                ))?;
+                for record in records {
+                    insert
+                        .execute(params![record.sample_id, record.label, record.value])
+                        .with_context(|| format!("Failed to insert into {table}"))?;
+                }
+            }
+            tx.commit().context("Failed to commit PGS scores")?;
+        }
+
+        info!("Wrote {} polygenic scores", scores.unscaled.len());
+        Ok(csv_path)
+    }
+
     /// Finalize streaming output and return file paths
     ///
     /// This closes all file handles, writes metadata, creates indexes, and
@@ -2665,5 +2717,39 @@ mod tests {
         // Test deserialization
         let parsed: OutputFormat = serde_json::from_str("\"parquet\"").unwrap();
         assert_eq!(parsed, OutputFormat::Parquet);
+    }
+
+    #[tokio::test]
+    async fn streaming_output_carries_uploaded_scores() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("scores.txt");
+        std::fs::write(&input, "sample,PGS000008\nsamp1,1.0\nsamp2,3.0\n").unwrap();
+        let scores = crate::parsers::PgsParser::parse(&input).unwrap();
+
+        let out = dir.path().join("out");
+        let mut generator = OutputGenerator::new("job".into(), "user".into(), out.clone());
+        generator
+            .initialize_streaming_output(&[OutputFormat::Sqlite], VcfFormat::Merged)
+            .await
+            .unwrap();
+        let csv_path = generator.write_pgs_scores(&scores).unwrap();
+        let (paths, _) = generator.finalize_streaming_output().await.unwrap();
+
+        assert_eq!(csv_path, out.join("pgs_scores.csv"));
+        assert_eq!(
+            std::fs::read_to_string(csv_path).unwrap(),
+            "sample_id,trait_label,value,z_score\nsamp1,PGS000008,1.0,-1.0\nsamp2,PGS000008,3.0,1.0\n"
+        );
+        let db = Connection::open(&paths[&OutputFormat::Sqlite]).unwrap();
+        for (table, expected) in [("pgs_unscaled", 3.0), ("pgs_scaled", 1.0)] {
+            let value: f64 = db
+                .query_row(
+                    &format!("SELECT value FROM {table} WHERE sample_id = 'samp2'"),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, expected, "{table}");
+        }
     }
 }

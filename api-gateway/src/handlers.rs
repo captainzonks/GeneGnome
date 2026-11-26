@@ -4,8 +4,8 @@
 // Description: HTTP request handlers for genetics API endpoints
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-09-27
-// Version: 1.0.1
+// Modified: 2026-11-26
+// Version: 1.0.2
 // ==============================================================================
 
 use axum::{
@@ -41,6 +41,9 @@ use crate::{
     state::AppState,
     validator::FileValidator,
 };
+
+/// Name an uploaded score table is saved under in the job's upload directory
+const PGS_UPLOAD_NAME: &str = "scores.txt";
 
 /// Root endpoint - API information
 pub async fn root() -> Json<ApiInfoResponse> {
@@ -122,8 +125,7 @@ pub async fn submit_job(
 
     let mut genome_file: Option<PathBuf> = None;
     let mut vcf_files: Vec<PathBuf> = Vec::new();
-    let mut pgs_file: Option<PathBuf> = None;
-    let mut output_formats = vec![OutputFormat::Parquet, OutputFormat::Vcf]; // Default formats (Parquet for analytics, VCF for bioinformatics)
+    let mut output_formats = Vec::new(); // Defaulted below if none are requested
     let mut quality_threshold = QualityThreshold::default(); // Default R² ≥ 0.9
     let mut user_email: Option<String> = None; // REQUIRED: Email for job ownership and notifications
     let mut vcf_format = "merged".to_string(); // Default to merged VCF
@@ -168,7 +170,8 @@ pub async fn submit_job(
                 info!("Saved genome file: {}", validated.safe_name);
             }
 
-            "vcf_file" => {
+            // The web form sends "vcf_files"
+            "vcf_file" | "vcf_files" => {
                 let filename = field.file_name().unwrap_or("chr.vcf.gz").to_string();
                 let data = field
                     .bytes()
@@ -219,8 +222,9 @@ pub async fn submit_job(
                     &validated.hash_sha256[..16]
                 );
 
-                // Save file using sanitized filename
-                let file_path = job_upload_dir.join(&validated.safe_name);
+                // Fixed name: the worker identifies the score table by it,
+                // whatever the user's file was called.
+                let file_path = job_upload_dir.join(PGS_UPLOAD_NAME);
                 let mut file = tokio::fs::File::create(&file_path)
                     .await
                     .map_err(|e| AppError::Internal(format!("Failed to create file: {}", e)))?;
@@ -228,7 +232,6 @@ pub async fn submit_job(
                     .await
                     .map_err(|e| AppError::Internal(format!("Failed to write file: {}", e)))?;
 
-                pgs_file = Some(file_path);
                 info!("Saved PGS file: {}", validated.safe_name);
             }
 
@@ -330,8 +333,6 @@ pub async fn submit_job(
     if vcf_files.is_empty() {
         return Err(AppError::BadRequest("Missing vcf_file(s)".to_string()));
     }
-
-    let _pgs_file = pgs_file.ok_or_else(|| AppError::BadRequest("Missing pgs_file".to_string()))?;
 
     // PUBLIC PLATFORM: Require email for job ownership and notifications
     let user_email = user_email.ok_or_else(|| {

@@ -9,7 +9,7 @@ class GeneticsUploader {
         this.fileTypes = {
             genome: { pattern: /^genome.*\.txt$/i, icon: '🧬', maxSize: 50 * 1024 * 1024 }, // 50MB
             vcf: { pattern: /^chr\d{1,2}\.dose\.vcf\.gz$/i, icon: '📊', maxSize: 300 * 1024 * 1024 }, // 300MB (chr1-4 can be ~250MB)
-            pgs: { pattern: /\.(pgs|txt)$/i, icon: '📈', maxSize: 10 * 1024 * 1024 } // 10MB
+            pgs: { pattern: /(\.pgs|^(?!genome).*scores.*\.(txt|csv))$/i, icon: '📈', maxSize: 10 * 1024 * 1024 } // 10MB
         };
 
         this.init();

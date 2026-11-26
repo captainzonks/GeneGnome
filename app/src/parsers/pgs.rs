@@ -4,8 +4,8 @@
 // Description: Parser for polygenic score data with z-score normalization
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2025-11-06
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.1.0
 // ==============================================================================
 // Format: CSV file with header
 // Example:
@@ -17,7 +17,7 @@
 
 use csv::ReaderBuilder;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use thiserror::Error;
 
@@ -61,6 +61,20 @@ pub enum PgsParseError {
 
     #[error("Invalid score value: {0}")]
     InvalidValue(String),
+
+    #[error("Sample '{sample_id}' has more than one score for '{label}'")]
+    DuplicateScore { sample_id: String, label: String },
+}
+
+/// True if an uploaded file name denotes a precomputed score table: any `.pgs`
+/// file, or a `.txt`/`.csv` file with "scores" in its name. Names starting with
+/// "genome" are 23andMe exports unless they end in `.pgs`.
+pub fn is_scores_filename(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name.ends_with(".pgs")
+        || (!name.starts_with("genome")
+            && name.contains("scores")
+            && (name.ends_with(".txt") || name.ends_with(".csv")))
 }
 
 /// PGS file parser with z-score scaling capability
@@ -123,6 +137,17 @@ impl PgsParser {
 
         if unscaled.is_empty() {
             return Err(PgsParseError::EmptyFile);
+        }
+
+        let mut seen = HashSet::new();
+        if let Some(repeat) = unscaled
+            .iter()
+            .find(|r| !seen.insert((r.sample_id.as_str(), r.label.as_str())))
+        {
+            return Err(PgsParseError::DuplicateScore {
+                sample_id: repeat.sample_id.clone(),
+                label: repeat.label.clone(),
+            });
         }
 
         // Scale by PGS label (z-score normalization)
@@ -325,6 +350,40 @@ pub struct PgsStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recognizes_score_table_filenames() {
+        for name in [
+            "scores.txt",
+            "My_Scores.csv",
+            "genome_scores.pgs",
+            "traits.PGS",
+        ] {
+            assert!(is_scores_filename(name), "{name}");
+        }
+        for name in [
+            "genome_v5.txt",
+            "genome_scores.txt",
+            "chr1.dose.vcf.gz",
+            "notes.txt",
+        ] {
+            assert!(!is_scores_filename(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn rejects_a_sample_scored_twice_for_one_label() {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "ID,PGS_label,score_value").unwrap();
+        writeln!(file, "s1,Height,1.0").unwrap();
+        writeln!(file, "s1,Height,2.0").unwrap();
+        file.flush().unwrap();
+        assert!(matches!(
+            PgsParser::parse(file.path()),
+            Err(PgsParseError::DuplicateScore { .. })
+        ));
+    }
 
     #[test]
     fn test_z_score_normalization() {
