@@ -4,8 +4,8 @@
 // Description: Application error type shared by handlers.rs and db.rs
 // Author: Matt Barham
 // Created: 2026-09-08
-// Modified: 2026-09-08
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.1.0
 // ==============================================================================
 
 use axum::{
@@ -23,6 +23,7 @@ pub enum AppError {
     NotFound,
     BadRequest(String),
     Forbidden,
+    TooManyRequests,
     Internal(String),
 }
 
@@ -32,6 +33,10 @@ impl IntoResponse for AppError {
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".to_string()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::Forbidden => (StatusCode::FORBIDDEN, "Access denied".to_string()),
+            AppError::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many attempts, try again later".to_string(),
+            ),
             AppError::Internal(msg) => {
                 error!("Internal error: {}", msg);
                 (

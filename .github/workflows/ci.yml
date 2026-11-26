@@ -3,12 +3,12 @@
 # ==============================================================================
 # Description: Format, lint and test each crate, check dependency advisories,
 #              run the row-level security test against a real Postgres and the
-#              queue test against a real Redis, and build the three
+#              queue and attempt limiter tests against a real Redis, and build the three
 #              application images. Publishes and deploys nothing.
 # Author: Matt Barham
 # Created: 2026-11-25
-# Modified: 2026-11-25
-# Version: 1.0.1
+# Modified: 2026-11-26
+# Version: 1.1.0
 # ==============================================================================
 
 name: CI
@@ -121,7 +121,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             worker/target
-          key: ${{ runner.os }}-queue-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('worker/Cargo.lock') }}
+            api-gateway/target
+          key: ${{ runner.os }}-queue-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('worker/Cargo.lock', 'api-gateway/Cargo.lock') }}
 
       - name: Run queue test
         working-directory: worker
@@ -133,6 +134,16 @@ jobs:
           # A skipped or filtered-out test must not count as a pass.
           grep -q '1 passed' "${RUNNER_TEMP}/queue.log"
           ! grep -q 'SKIPPED' "${RUNNER_TEMP}/queue.log"
+
+      - name: Run attempt limiter test
+        working-directory: api-gateway
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379
+        run: |
+          set -euo pipefail
+          cargo test --locked attempts_are_capped -- --nocapture 2>&1 | tee "${RUNNER_TEMP}/attempts.log"
+          grep -q '1 passed' "${RUNNER_TEMP}/attempts.log"
+          ! grep -q 'SKIPPED' "${RUNNER_TEMP}/attempts.log"
 
   advisories:
     name: cargo-deny (advisories, sources)

@@ -9,7 +9,7 @@ Description: Overview, architecture, deployment, security model, and measured
 Author: Matt Barham
 Created: 2025-11-22
 Modified: 2026-11-26
-Version: 1.3.3
+Version: 1.3.4
 ==============================================================================
 Document Type: Reference
 Audience: Developer, Operator
@@ -473,7 +473,7 @@ cd app         && cargo build --release
 cd ../api-gateway && cargo build --release
 cd ../worker   && cargo build --release
 
-# Test — 75 tests: app 45, api-gateway 20, worker 10
+# Test — 80 tests: app 47, api-gateway 21, worker 12
 cd app         && cargo test
 cd ../api-gateway && cargo test
 cd ../worker   && cargo test

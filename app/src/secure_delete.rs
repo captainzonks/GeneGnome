@@ -4,122 +4,167 @@
 // Description: 7-pass overwrite for secure deletion of genetic data
 // Author: Matt Barham
 // Created: 2025-10-31
-// Modified: 2025-10-31
-// Version: 1.0.0
+// Modified: 2026-11-26
+// Version: 1.1.0
 // Security: DoD 5220.22-M standard (7-pass overwrite)
 // ==============================================================================
 
-use anyhow::{Context, Result};
-use std::fs::OpenOptions;
-use std::io::{Seek, SeekFrom, Write};
+use anyhow::{Context, Result, ensure};
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use tracing::{debug, info};
 
-/// Securely delete a file using DoD 5220.22-M standard (7-pass overwrite)
+/// Bytes held in memory while overwriting, whatever the file size
+const OVERWRITE_BUFFER: usize = 1024 * 1024;
+
+const PASSES: usize = 7;
+
+/// What one overwrite pass writes
+#[derive(Debug, Clone, Copy)]
+enum Pass {
+    Fill(u8),
+    Random,
+}
+
+/// Securely delete a file using the DoD 5220.22-M style 7-pass overwrite
 ///
 /// Pass pattern:
 /// 1. 0x00 (all zeros)
 /// 2. 0xFF (all ones)
 ///    3-6. Random data
-/// 7. 0x00 (all zeros)
+/// 7. 0x00 (all zeros), then read back
 ///
-/// After overwriting, the file is unlinked from the filesystem.
+/// After overwriting, the file is unlinked from the filesystem. Overwriting in
+/// place cannot guarantee erasure on SSDs or copy-on-write filesystems; the
+/// encrypted volume remains the primary protection.
 pub async fn secure_delete_file(path: &Path) -> Result<()> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || delete_file(&path))
+        .await
+        .context("Secure deletion task failed")?
+}
+
+/// Securely delete an entire directory and all its contents
+///
+/// Symbolic links are removed, never followed. Every file is attempted even if
+/// an earlier one fails; the first failure is returned.
+pub async fn secure_delete_directory(path: &Path) -> Result<()> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || delete_directory(&path))
+        .await
+        .context("Secure deletion task failed")?
+}
+
+fn delete_file(path: &Path) -> Result<()> {
     info!("Securely deleting file: {:?}", path);
 
-    // Get file size
-    let metadata = std::fs::metadata(path).context("Failed to get file metadata")?;
-    let size = metadata.len() as usize;
-
-    debug!("File size: {} bytes, beginning 7-pass overwrite", size);
-
-    // Open file for writing
-    let mut file = OpenOptions::new()
-        .write(true)
-        .open(path)
-        .context("Failed to open file for writing")?;
-
-    // Perform 7-pass overwrite
-    for pass in 0..7 {
-        let pattern: u8 = match pass {
-            0 => {
-                debug!("Pass 1/7: Writing 0x00 (all zeros)");
-                0x00
-            }
-            1 => {
-                debug!("Pass 2/7: Writing 0xFF (all ones)");
-                0xFF
-            }
-            2..=5 => {
-                debug!("Pass {}/7: Writing random data", pass + 1);
-                rand::random::<u8>()
-            }
-            6 => {
-                debug!("Pass 7/7: Writing 0x00 (all zeros)");
-                0x00
-            }
-            _ => unreachable!(),
-        };
-
-        // Create buffer with pattern
-        let buffer = if (2..=5).contains(&pass) {
-            // Random data: generate new random bytes for each chunk
-            vec![0u8; size]
-                .into_iter()
-                .map(|_| rand::random::<u8>())
-                .collect::<Vec<u8>>()
-        } else {
-            // Fixed pattern
-            vec![pattern; size]
-        };
-
-        // Seek to beginning
-        file.seek(SeekFrom::Start(0))
-            .context("Failed to seek to file start")?;
-
-        // Write pattern
-        file.write_all(&buffer)
-            .context("Failed to write overwrite pattern")?;
-
-        // Sync to disk (ensure data is written, not just buffered)
-        file.sync_all().context("Failed to sync file to disk")?;
-    }
-
-    // Close file handle
-    drop(file);
-
-    // Unlink from filesystem
+    overwrite(path)?;
     std::fs::remove_file(path).context("Failed to remove file after secure overwrite")?;
 
     info!("File securely deleted: {:?}", path);
     Ok(())
 }
 
-/// Securely delete an entire directory and all its contents
-pub async fn secure_delete_directory(path: &Path) -> Result<()> {
+fn delete_directory(path: &Path) -> Result<()> {
     info!("Securely deleting directory: {:?}", path);
 
-    // Recursively delete all files
-    for entry in walkdir::WalkDir::new(path)
-        .contents_first(true) // Files before directories
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let entry_path = entry.path();
-
-        if entry_path.is_file() {
-            secure_delete_file(entry_path).await?;
-        } else if entry_path.is_dir() && entry_path != path {
-            // Remove empty directories
-            std::fs::remove_dir(entry_path).context("Failed to remove directory")?;
+    let mut first_error = None;
+    // Contents first, so each directory is empty by the time it is reached
+    for entry in walkdir::WalkDir::new(path).contents_first(true) {
+        let result = entry.context("Failed to walk directory").and_then(|entry| {
+            let file_type = entry.file_type();
+            if file_type.is_file() {
+                delete_file(entry.path())
+            } else if file_type.is_dir() {
+                std::fs::remove_dir(entry.path()).context("Failed to remove directory")
+            } else {
+                std::fs::remove_file(entry.path()).context("Failed to remove link")
+            }
+        });
+        if let Err(error) = result {
+            first_error.get_or_insert(error);
         }
     }
 
-    // Remove the root directory
-    std::fs::remove_dir(path).context("Failed to remove root directory")?;
+    match first_error {
+        Some(error) => Err(error),
+        None => {
+            info!("Directory securely deleted: {:?}", path);
+            Ok(())
+        }
+    }
+}
 
-    info!("Directory securely deleted: {:?}", path);
+/// Overwrite a file's contents in place, syncing after each pass
+fn overwrite(path: &Path) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .context("Failed to open file for writing")?;
+    let size = file
+        .metadata()
+        .context("Failed to get file metadata")?
+        .len();
+    let mut buffer = vec![0u8; OVERWRITE_BUFFER];
+
+    let passes: [Pass; PASSES] = [
+        Pass::Fill(0x00),
+        Pass::Fill(0xFF),
+        Pass::Random,
+        Pass::Random,
+        Pass::Random,
+        Pass::Random,
+        Pass::Fill(0x00),
+    ];
+
+    for (number, pass) in passes.into_iter().enumerate() {
+        debug!("Pass {}/{}: {:?}", number + 1, PASSES, pass);
+        if let Pass::Fill(byte) = pass {
+            buffer.fill(byte);
+        }
+
+        file.seek(SeekFrom::Start(0))
+            .context("Failed to seek to file start")?;
+        let mut remaining = size;
+        while remaining > 0 {
+            let length = chunk_length(remaining);
+            if let Pass::Random = pass {
+                rand::fill(&mut buffer[..length]);
+            }
+            file.write_all(&buffer[..length])
+                .context("Failed to write overwrite pattern")?;
+            remaining -= length as u64;
+        }
+
+        // Sync to disk (ensure data is written, not just buffered)
+        file.sync_all().context("Failed to sync file to disk")?;
+    }
+
+    verify_zeroed(&mut file, size, &mut buffer)
+}
+
+/// Read the file back and confirm the final pass left only zeros
+fn verify_zeroed(file: &mut File, size: u64, buffer: &mut [u8]) -> Result<()> {
+    file.seek(SeekFrom::Start(0))
+        .context("Failed to seek to file start")?;
+    let mut remaining = size;
+    while remaining > 0 {
+        let length = chunk_length(remaining);
+        file.read_exact(&mut buffer[..length])
+            .context("Failed to read back overwritten file")?;
+        ensure!(
+            buffer[..length].iter().all(|byte| *byte == 0),
+            "Overwrite verification failed"
+        );
+        remaining -= length as u64;
+    }
     Ok(())
+}
+
+fn chunk_length(remaining: u64) -> usize {
+    usize::try_from(remaining).map_or(OVERWRITE_BUFFER, |r| r.min(OVERWRITE_BUFFER))
 }
 
 #[cfg(test)]
@@ -160,5 +205,34 @@ mod tests {
 
         // File should be gone
         assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn overwrite_covers_files_larger_than_one_buffer() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let length = OVERWRITE_BUFFER * 2 + 17;
+        std::fs::write(temp_file.path(), vec![0xAB; length]).unwrap();
+
+        overwrite(temp_file.path()).unwrap();
+
+        let after = std::fs::read(temp_file.path()).unwrap();
+        assert_eq!(after.len(), length);
+        assert!(after.iter().all(|byte| *byte == 0));
+    }
+
+    #[tokio::test]
+    async fn directory_deletion_never_follows_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = dir.path().join("keep.txt");
+        std::fs::write(&outside, b"keep me").unwrap();
+        let target = dir.path().join("job");
+        std::fs::create_dir_all(target.join("nested")).unwrap();
+        std::fs::write(target.join("nested/genome.txt"), b"data").unwrap();
+        std::os::unix::fs::symlink(&outside, target.join("link")).unwrap();
+
+        secure_delete_directory(&target).await.unwrap();
+
+        assert!(!target.exists());
+        assert_eq!(std::fs::read(&outside).unwrap(), b"keep me");
     }
 }

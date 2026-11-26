@@ -4,8 +4,8 @@
 // Description: Axum web server for genetics data processing API
 // Author: Matt Barham
 // Created: 2025-11-06
-// Modified: 2026-09-27
-// Version: 1.1.1
+// Modified: 2026-11-26
+// Version: 1.1.2
 // ==============================================================================
 
 use anyhow::{Context, Result};
@@ -23,6 +23,7 @@ use tower_http::{
 };
 use tracing::{Level, info};
 
+mod attempts;
 mod db;
 mod email;
 mod error;
