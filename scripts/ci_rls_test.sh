@@ -9,7 +9,7 @@
 # Author: Matt Barham
 # Created: 2026-11-25
 # Modified: 2026-11-25
-# Version: 1.0.0
+# Version: 1.0.1
 # Requirements: docker, cargo, openssl
 # Usage: scripts/ci_rls_test.sh
 # ==============================================================================
@@ -17,7 +17,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly POSTGRES_IMAGE="postgres:18.6"
+readonly POSTGRES_IMAGE="postgres:18.7"
 readonly CONTAINER="genegnome_rls_test_$$"
 readonly READY_ATTEMPTS=60
 

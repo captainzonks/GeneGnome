@@ -8,7 +8,7 @@
 # Author: Matt Barham
 # Created: 2026-11-25
 # Modified: 2026-11-25
-# Version: 1.0.0
+# Version: 1.0.1
 # ==============================================================================
 
 name: CI
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 30
     services:
       redis:
-        image: redis:8.4
+        image: redis:8.12.0-alpine
         ports:
           - 6379:6379
         options: >-
