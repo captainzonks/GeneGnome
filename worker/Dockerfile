@@ -4,7 +4,7 @@
 # Description: Background worker for genetic data processing
 # Author: Matthew Barham
 # Created: 2025-11-07
-# Modified: 2026-10-20
+# Modified: 2026-11-25
 # Version: 1.3.1
 # Host: your-server
 # ==============================================================================
@@ -39,18 +39,18 @@ RUN apt update -qq && apt install -y -qq --no-install-recommends \
 WORKDIR /build
 
 # Copy workspace files
-COPY app/Cargo.toml ./app/
+COPY app/Cargo.toml app/Cargo.lock ./app/
 COPY app/src ./app/src/
-COPY worker/Cargo.toml ./worker/
+COPY worker/Cargo.toml worker/Cargo.lock ./worker/
 COPY worker/src ./worker/src/
 
 # Build genetics-processor library first
 WORKDIR /build/app
-RUN cargo build --release --lib
+RUN cargo build --release --locked --lib
 
 # Build Worker
 WORKDIR /build/worker
-RUN cargo build --release
+RUN cargo build --release --locked
 
 #=============================================================================
 # RUNTIME STAGE - Minimal Production Image

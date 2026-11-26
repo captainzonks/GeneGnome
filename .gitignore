@@ -51,7 +51,6 @@ imputed_*.vcf.gz
 # Rust build outputs
 target/
 **/*.rs.bk
-Cargo.lock
 
 # Docker build cache
 build/

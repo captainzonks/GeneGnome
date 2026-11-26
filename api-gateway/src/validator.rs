@@ -257,7 +257,11 @@ impl FileValidator {
     fn compute_sha256(&self, data: &Bytes) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
-        format!("{:x}", hasher.finalize())
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
     }
 
     /// Quick validation for chunked uploads (less strict, worker will re-validate).

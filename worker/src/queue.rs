@@ -10,8 +10,9 @@
 
 use anyhow::{Context, Result};
 use redis::AsyncCommands;
-use redis::aio::ConnectionManager;
+use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use uuid::Uuid;
 
 const QUEUE_KEY: &str = "genetics:job_queue";
@@ -73,6 +74,23 @@ fn default_vcf_format() -> String {
     "merged".to_string()
 }
 
+/// How long `BRPOP` blocks on an empty queue
+const DEQUEUE_BLOCK: Duration = Duration::from_secs(1);
+
+/// Client-side reply timeout. It must exceed `DEQUEUE_BLOCK`: a shorter one (the
+/// library default is 500 ms) fails every idle poll and can drop a job that
+/// Redis pops after the client has given up.
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Open the worker's auto-reconnecting Redis connection
+pub async fn connect(client: redis::Client) -> Result<ConnectionManager> {
+    let config = ConnectionManagerConfig::new().set_response_timeout(Some(RESPONSE_TIMEOUT));
+
+    ConnectionManager::new_with_config(client, config)
+        .await
+        .context("Failed to create Redis connection manager")
+}
+
 /// Job queue manager
 pub struct JobQueue {
     conn: ConnectionManager,
@@ -86,10 +104,9 @@ impl JobQueue {
 
     /// Dequeue a job (blocking pop with timeout)
     pub async fn dequeue(&mut self) -> Result<Option<JobPayload>> {
-        // BRPOP with 1 second timeout
         let result: Option<(String, String)> = self
             .conn
-            .brpop(QUEUE_KEY, 1.0)
+            .brpop(QUEUE_KEY, DEQUEUE_BLOCK.as_secs_f64())
             .await
             .context("Failed to pop from queue")?;
 
@@ -112,5 +129,26 @@ impl JobQueue {
             .context("Failed to publish progress update")?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty queue must yield `Ok(None)` once the blocking pop expires, not a
+    /// client-side timeout. Needs a disposable Redis in TEST_REDIS_URL.
+    #[tokio::test]
+    async fn dequeue_on_empty_queue_waits_out_the_blocking_pop() {
+        let Ok(url) = std::env::var("TEST_REDIS_URL") else {
+            eprintln!("SKIPPED: TEST_REDIS_URL not set");
+            return;
+        };
+        let client = redis::Client::open(url).expect("valid TEST_REDIS_URL");
+        let conn = connect(client).await.expect("connect to Redis");
+
+        let job = JobQueue::new(conn).dequeue().await;
+
+        assert!(matches!(job, Ok(None)), "unexpected result: {job:?}");
     }
 }

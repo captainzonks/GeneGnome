@@ -38,35 +38,32 @@ axum = { version = "0.8.6", features = ["multipart", "ws", "macros"] }
 
 # BREAKING CHANGE: axum-extra 0.9 → 0.12.1
 # - API updates for typed headers
-axum-extra = { version = "0.12.1", features = ["typed-header"] }
 
 tower = { version = "0.5.2", features = ["full"] }
-tower-http = { version = "0.6.6", features = ["fs", "cors", "trace", "limit"] }
+tower-http = { version = "0.7.0", features = ["fs", "cors", "trace", "limit"] }
 hyper = { version = "1.7.0", features = ["full"] }
 
 # ==============================================================================
 # DATABASE
 # ==============================================================================
-sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "tls-native-tls", "postgres", "uuid", "chrono", "json"] }
 
 # ==============================================================================
 # REDIS (Job Queue)
 # ==============================================================================
 # NOTE: redis 1.0.0-rc.3 available but staying with stable 0.32.2
-redis = { version = "0.32.2", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.8.0", features = ["tokio-comp", "connection-manager"] }
 
 # ==============================================================================
 # FILE HANDLING
 # ==============================================================================
-tempfile = "3.23.0"
 tokio-util = { version = "0.7.17", features = ["io"] }
 flate2 = "1.0.35"
 
 # ==============================================================================
 # VALIDATION
 # ==============================================================================
-validator = "0.20.0"
-sha2 = "0.10.8"
+sha2 = "0.11.0"
 
 # ==============================================================================
 # SERIALIZATION
@@ -102,19 +99,18 @@ uuid = { version = "1.18.1", features = ["v4", "serde"] }
 # Rate limiting
 # BREAKING CHANGE: governor 0.7 → 0.10.1
 # - API updates for rate limiting configuration
-governor = "0.10.1"
 
 # ==============================================================================
 # CRYPTOGRAPHY & SECURITY (Phase 3: Token & Password Generation)
 # ==============================================================================
 # Random number generation for tokens
-rand = "0.8.5"
+rand = "0.10.2"
 
 # Argon2id password hashing and verification
-argon2 = { version = "0.5.3", features = ["std"] }
+argon2 = "0.6.0"
 
 # Base64 encoding for URL-safe tokens
-base64 = "0.22.1"
+base64 = "0.23.0"
 
 # ==============================================================================
 # EMAIL (SMTP via Lettre)

@@ -4,7 +4,7 @@
 # Description: API Gateway for genetic data processing service
 # Author: Matthew Barham
 # Created: 2025-11-07
-# Modified: 2026-10-20
+# Modified: 2026-11-25
 # Version: 1.3.1
 # Host: your-server
 # ==============================================================================
@@ -39,18 +39,18 @@ RUN apt update -qq && apt install -y -qq --no-install-recommends \
 WORKDIR /build
 
 # Copy workspace files
-COPY app/Cargo.toml ./app/
+COPY app/Cargo.toml app/Cargo.lock ./app/
 COPY app/src ./app/src/
-COPY api-gateway/Cargo.toml ./api-gateway/
+COPY api-gateway/Cargo.toml api-gateway/Cargo.lock ./api-gateway/
 COPY api-gateway/src ./api-gateway/src/
 
 # Build genetics-processor library first
 WORKDIR /build/app
-RUN cargo build --release --lib
+RUN cargo build --release --locked --lib
 
 # Build API Gateway
 WORKDIR /build/api-gateway
-RUN cargo build --release
+RUN cargo build --release --locked
 
 #=============================================================================
 # RUNTIME STAGE - Minimal Production Image

@@ -24,8 +24,6 @@ tests/
 # Reference and Analysis Results and Data
 genome-data/
 
-# Cargo lock (we use workspace lock)
-**/Cargo.lock
 
 # Logs
 *.log

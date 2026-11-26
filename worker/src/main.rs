@@ -64,9 +64,7 @@ async fn main() -> Result<()> {
     let redis_client = RedisClient::open(redis_url).context("Failed to create Redis client")?;
 
     // Create async connection manager
-    let redis_conn = ConnectionManager::new(redis_client)
-        .await
-        .context("Failed to create Redis connection manager")?;
+    let redis_conn = queue::connect(redis_client).await?;
 
     info!("Connected to Redis");
 
