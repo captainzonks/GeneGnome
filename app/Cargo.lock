@@ -989,7 +989,7 @@ dependencies = [
 
 [[package]]
 name = "genetics-processor"
-version = "1.5.8"
+version = "1.6.0"
 dependencies = [
  "anyhow",
  "arrow",
