@@ -15,8 +15,7 @@ use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::fs::File;
-use std::io::{BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{Level, error, info, warn};
 use uuid::Uuid;
@@ -419,6 +418,8 @@ impl Worker {
     }
 
     /// Update job status in database (with RLS context)
+    // Each argument maps to one job column.
+    #[allow(clippy::too_many_arguments)]
     async fn update_job_status(
         &self,
         job_id: Uuid,
@@ -518,14 +519,14 @@ impl Worker {
 
     /// Create ZIP archive of all result files in output directory
     /// Uses STORE method (no compression) since files are already compressed
-    async fn create_results_zip(&self, output_dir: &PathBuf, job_id: Uuid) -> Result<PathBuf> {
+    async fn create_results_zip(&self, output_dir: &Path, job_id: Uuid) -> Result<PathBuf> {
         let zip_filename = format!("results_{}.zip", job_id);
         let zip_path = output_dir.join(&zip_filename);
 
         info!("Creating ZIP archive: {:?}", zip_path);
 
         // Use blocking task for synchronous ZIP operations
-        let output_dir_clone = output_dir.clone();
+        let output_dir_clone = output_dir.to_path_buf();
         let zip_path_clone = zip_path.clone();
 
         tokio::task::spawn_blocking(move || {
@@ -723,7 +724,7 @@ impl Worker {
     async fn reassemble_chunks(
         &self,
         chunks_dir: &PathBuf,
-        target_dir: &PathBuf,
+        target_dir: &Path,
         job_id: Uuid,
     ) -> Result<()> {
         use tokio::io::AsyncWriteExt;
@@ -759,7 +760,7 @@ impl Worker {
                 if let Ok(chunk_index) = chunk_index_str.parse::<usize>() {
                     chunks_by_file
                         .entry(original_name.to_string())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push((chunk_index, path));
                 }
             }

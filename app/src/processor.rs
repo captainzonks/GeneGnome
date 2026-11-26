@@ -23,7 +23,7 @@ use crate::reference_panel::ReferencePanelReader;
 use crate::secure_delete;
 
 // Re-export for backward compatibility with worker
-pub use crate::models::{DataSource, MergedVariant};
+pub use crate::models::DataSource;
 
 pub struct GeneticsProcessor {
     job_id: Uuid,
@@ -82,7 +82,7 @@ impl GeneticsProcessor {
 
         // 4. Parse 23andMe data
         info!("Parsing 23andMe data");
-        let _user_genome = self.parse_23andme(&files.genome_file).await?;
+        self.check_23andme(&files.genome_file).await?;
 
         // 5. Process each chromosome (50 reference + 1 user = 51 samples)
         info!("Processing 22 chromosomes with 51-sample merge");
@@ -198,7 +198,8 @@ impl GeneticsProcessor {
         Ok(())
     }
 
-    async fn parse_23andme(&self, path: &Path) -> Result<UserGenomeData> {
+    /// Parse the whole file up front so a bad upload fails before chromosome work
+    async fn check_23andme(&self, path: &Path) -> Result<()> {
         info!("Parsing 23andMe genome file: {:?}", path);
 
         // Create parser that only includes autosomal chromosomes (1-22)
@@ -211,7 +212,7 @@ impl GeneticsProcessor {
 
         info!("Parsed {} SNPs from 23andMe file", records.len());
 
-        Ok(UserGenomeData { records })
+        Ok(())
     }
 
     async fn process_chromosome(
@@ -605,11 +606,6 @@ struct InputFiles {
     genome_file: PathBuf,
     vcf_files: Vec<PathBuf>,
     pgs_file: PathBuf,
-}
-
-struct UserGenomeData {
-    /// All parsed 23andMe records
-    records: Vec<Genome23Record>,
 }
 
 // Helper functions

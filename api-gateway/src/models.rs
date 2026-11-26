@@ -84,17 +84,6 @@ pub enum JobStatus {
     Failed,
 }
 
-impl JobStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            JobStatus::Queued => "queued",
-            JobStatus::Processing => "processing",
-            JobStatus::Complete => "complete",
-            JobStatus::Failed => "failed",
-        }
-    }
-}
-
 /// Output format selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd)]
 #[serde(rename_all = "lowercase")]
@@ -108,57 +97,12 @@ pub enum OutputFormat {
 /// Quality threshold for imputation filtering (must match worker queue.rs)
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum QualityThreshold {
     None, // No filtering - include all variants
     R080, // R² ≥ 0.8
+    #[default]
     R090, // R² ≥ 0.9 (default, matches R script)
-}
-
-impl Default for QualityThreshold {
-    fn default() -> Self {
-        QualityThreshold::R090 // Default to R² ≥ 0.9 to match R script behavior
-    }
-}
-
-impl OutputFormat {
-    pub fn extension(&self) -> &'static str {
-        match self {
-            OutputFormat::Parquet => "parquet",
-            OutputFormat::Sqlite => "db",
-            OutputFormat::Vcf => "vcf.gz",
-        }
-    }
-
-    pub fn mime_type(&self) -> &'static str {
-        match self {
-            OutputFormat::Parquet => "application/octet-stream",
-            OutputFormat::Sqlite => "application/octet-stream",
-            OutputFormat::Vcf => "application/gzip",
-        }
-    }
-}
-
-/// Job creation request (from multipart form)
-#[derive(Debug)]
-pub struct JobCreateRequest {
-    pub user_id: String,
-    pub genome_file: Vec<u8>,
-    pub genome_filename: String,
-    pub vcf_files: Vec<(String, Vec<u8>)>,
-    pub pgs_file: Vec<u8>,
-    pub pgs_filename: String,
-    pub output_formats: Vec<OutputFormat>,
-    pub quality_threshold: QualityThreshold,
-}
-
-/// Progress update message (for WebSocket)
-#[derive(Debug, Serialize)]
-pub struct ProgressUpdate {
-    pub job_id: Uuid,
-    pub progress_pct: f32,
-    pub current_step: String,
-    pub message: String,
-    pub timestamp: DateTime<Utc>,
 }
 
 /// API information response
@@ -198,13 +142,6 @@ impl ErrorResponse {
         Self {
             error: error.into(),
             details: None,
-        }
-    }
-
-    pub fn with_details(error: impl Into<String>, details: impl Into<String>) -> Self {
-        Self {
-            error: error.into(),
-            details: Some(details.into()),
         }
     }
 }

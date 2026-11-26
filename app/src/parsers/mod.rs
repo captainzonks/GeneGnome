@@ -13,5 +13,5 @@ pub mod pgs;
 pub mod vcf;
 
 pub use genome23andme::{Genome23Parser, Genome23Record};
-pub use pgs::{PgsDataset, PgsParseError, PgsParser, PgsRecord, PgsStats};
-pub use vcf::{VCFParseError, VCFParser, VCFRecord};
+pub use pgs::{PgsDataset, PgsParser};
+pub use vcf::VCFParser;

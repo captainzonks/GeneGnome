@@ -29,9 +29,11 @@ pub enum OutputFormat {
 /// Quality threshold for imputation filtering
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum QualityThreshold {
     None, // No filtering - include all variants
     R080, // R² ≥ 0.8
+    #[default]
     R090, // R² ≥ 0.9 (default, matches R script)
 }
 
@@ -43,21 +45,6 @@ impl QualityThreshold {
             QualityThreshold::R080 => Some(0.8),
             QualityThreshold::R090 => Some(0.9),
         }
-    }
-
-    /// Get a human-readable description
-    pub fn description(&self) -> &'static str {
-        match self {
-            QualityThreshold::None => "No filtering (all variants)",
-            QualityThreshold::R080 => "R² ≥ 0.8 (good quality)",
-            QualityThreshold::R090 => "R² ≥ 0.9 (high quality, matches R script)",
-        }
-    }
-}
-
-impl Default for QualityThreshold {
-    fn default() -> Self {
-        QualityThreshold::R090 // Default to R² ≥ 0.9 to match R script behavior
     }
 }
 

@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 // Import from genetics-processor library
 use genetics_processor::genotype_converter::genotype_to_dosage;
+use genetics_processor::models::MergedVariant;
 use genetics_processor::models::{
     MultiSampleVariant, QualityThreshold as ModelQualityThreshold, SampleData,
 };
@@ -28,7 +29,7 @@ use genetics_processor::parsers::{
     pgs::PgsParser,
     vcf::{VCFParser, VCFRecord},
 };
-use genetics_processor::processor::{DataSource, MergedVariant};
+use genetics_processor::processor::DataSource;
 use genetics_processor::reference_panel::ReferencePanelReader;
 
 use crate::db;
@@ -84,18 +85,18 @@ impl JobProcessor {
         tx.commit().await.context("Failed to commit")?;
 
         // Parse VCF format preference from metadata
-        if let Some((metadata,)) = row {
-            if let Some(vcf_format_str) = metadata.get("vcf_format").and_then(|v| v.as_str()) {
-                let format = match vcf_format_str {
-                    "per_chromosome" => VcfFormat::PerChromosome,
-                    "merged" | _ => VcfFormat::Merged, // Default to merged for unknown values
-                };
-                info!(
-                    "Job {} VCF format preference from metadata: {:?}",
-                    self.job_id, format
-                );
-                return Ok(format);
-            }
+        if let Some((metadata,)) = row
+            && let Some(vcf_format_str) = metadata.get("vcf_format").and_then(|v| v.as_str())
+        {
+            let format = match vcf_format_str {
+                "per_chromosome" => VcfFormat::PerChromosome,
+                _ => VcfFormat::Merged, // Default to merged for unknown values
+            };
+            info!(
+                "Job {} VCF format preference from metadata: {:?}",
+                self.job_id, format
+            );
+            return Ok(format);
         }
 
         // No metadata or no vcf_format field - default to Merged
@@ -355,7 +356,8 @@ impl JobProcessor {
         &self,
         genome_data: &[Genome23Record],
         vcf_data: &HashMap<u8, Vec<VCFRecord>>,
-        pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
+        // Not yet written by the streaming path: uploaded scores are parsed, then dropped
+        _pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
         quality_threshold: QualityThreshold,
         output_formats: &[OutputFormat],
     ) -> Result<(
@@ -403,7 +405,7 @@ impl JobProcessor {
         );
 
         // Get VCF format preference from job metadata
-        use genetics_processor::output::VcfFormat;
+
         let vcf_format = self.get_vcf_format_preference().await?;
         info!(
             "Using VCF format preference from job metadata: {:?}",
@@ -713,14 +715,13 @@ impl JobProcessor {
                         // Missing genotype or conversion failed, use imputed dosage
 
                         // Apply quality threshold filtering
-                        if let Some(threshold) = quality_threshold.value() {
-                            if let Some(r2) = vcf_record.imputation_quality {
-                                if r2 < threshold {
-                                    // Skip this variant - doesn't meet quality threshold
-                                    filtered_count += 1;
-                                    continue;
-                                }
-                            }
+                        if let Some(threshold) = quality_threshold.value()
+                            && let Some(r2) = vcf_record.imputation_quality
+                            && r2 < threshold
+                        {
+                            // Skip this variant - doesn't meet quality threshold
+                            filtered_count += 1;
+                            continue;
                         }
 
                         let source = if vcf_record.imputation_quality.unwrap_or(1.0) < 0.3 {
@@ -746,14 +747,13 @@ impl JobProcessor {
                 // No genotyped data, use imputed dosage
 
                 // Apply quality threshold filtering
-                if let Some(threshold) = quality_threshold.value() {
-                    if let Some(r2) = vcf_record.imputation_quality {
-                        if r2 < threshold {
-                            // Skip this variant - doesn't meet quality threshold
-                            filtered_count += 1;
-                            continue;
-                        }
-                    }
+                if let Some(threshold) = quality_threshold.value()
+                    && let Some(r2) = vcf_record.imputation_quality
+                    && r2 < threshold
+                {
+                    // Skip this variant - doesn't meet quality threshold
+                    filtered_count += 1;
+                    continue;
                 }
 
                 let source = if vcf_record.imputation_quality.unwrap_or(1.0) < 0.3 {
@@ -1012,71 +1012,6 @@ impl JobProcessor {
         Ok(result)
     }
 
-    /// Generate output files in requested formats (NEW multi-sample)
-    async fn generate_multi_sample_outputs(
-        &self,
-        merged_chromosomes: &HashMap<u8, Vec<MultiSampleVariant>>,
-        pgs_data: Option<&genetics_processor::parsers::pgs::PgsDataset>,
-        output_formats: &[OutputFormat],
-    ) -> Result<HashMap<String, PathBuf>> {
-        let output_gen = OutputGenerator::new(
-            self.job_id.to_string(),
-            self.user_id.clone(),
-            self.output_dir.clone(),
-        );
-
-        let total_formats = output_formats.len();
-        let mut result = HashMap::new();
-
-        for (idx, format) in output_formats.iter().enumerate() {
-            let format_name = match format {
-                OutputFormat::Parquet => "Parquet",
-                OutputFormat::Sqlite => "SQLite",
-                OutputFormat::Vcf => "VCF",
-            };
-
-            self.publish_progress(
-                80.0 + ((idx as f32 / total_formats as f32) * 15.0),
-                &format!(
-                    "Generating {} output ({}/{})",
-                    format_name,
-                    idx + 1,
-                    total_formats
-                ),
-            )
-            .await?;
-
-            // Convert single format to ProcessorOutputFormat
-            let processor_format = match format {
-                OutputFormat::Parquet => ProcessorOutputFormat::Parquet,
-                OutputFormat::Sqlite => ProcessorOutputFormat::Sqlite,
-                OutputFormat::Vcf => ProcessorOutputFormat::Vcf,
-            };
-
-            let output_paths = output_gen
-                .generate_multi_sample(&[processor_format], merged_chromosomes, pgs_data)
-                .await
-                .context(format!("Failed to generate {} output", format_name))?;
-
-            // Add to results
-            for (fmt, path) in output_paths {
-                let file_size = tokio::fs::metadata(&path).await.ok().map(|m| m.len());
-
-                if let Some(size) = file_size {
-                    let size_mb = size as f64 / 1_048_576.0;
-                    info!(
-                        "Generated {} output (51 samples): {:.2} MB",
-                        format_name, size_mb
-                    );
-                }
-
-                result.insert(format!("{:?}", fmt), path);
-            }
-        }
-
-        Ok(result)
-    }
-
     /// Record output file metadata in database
     async fn record_output_files(&self, output_paths: &HashMap<String, PathBuf>) -> Result<()> {
         // RLS-scoped: genetics_files has the same isolation policy as
@@ -1169,7 +1104,7 @@ fn format_dosage_as_genotype(dosage: f64) -> String {
 /// Calculate dosage from phased genotype string
 fn calculate_dosage_from_genotype(genotype: &str) -> f64 {
     // Handle both phased (|) and unphased (/) separators
-    let alleles: Vec<&str> = genotype.split(|c| c == '|' || c == '/').collect();
+    let alleles: Vec<&str> = genotype.split(['|', '/']).collect();
 
     if alleles.len() != 2 {
         return 0.0; // Default for invalid genotype

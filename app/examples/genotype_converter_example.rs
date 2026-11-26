@@ -28,8 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     println!(
-        "{:<12} {:<6} {:<6} {:<10} {}",
-        "Genotype", "REF", "ALT", "Dosage", "Type"
+        "{:<12} {:<6} {:<6} {:<10} Type",
+        "Genotype", "REF", "ALT", "Dosage"
     );
     println!("{:-<60}", "");
 
@@ -184,7 +184,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     // Simulated 23andMe genotypes at the same positions
-    let genotypes_23andme = vec![
+    let genotypes_23andme = [
         (69869, "TT"),  // User has homozygous ref
         (74792, "--"),  // Missing - use imputed
         (565508, "AG"), // User has heterozygous

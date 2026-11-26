@@ -324,14 +324,14 @@ pub async fn submit_job(
     info!("Job quality threshold: {:?}", quality_threshold);
 
     // Validate required files
-    let genome_file =
+    let _genome_file =
         genome_file.ok_or_else(|| AppError::BadRequest("Missing genome_file".to_string()))?;
 
     if vcf_files.is_empty() {
         return Err(AppError::BadRequest("Missing vcf_file(s)".to_string()));
     }
 
-    let pgs_file = pgs_file.ok_or_else(|| AppError::BadRequest("Missing pgs_file".to_string()))?;
+    let _pgs_file = pgs_file.ok_or_else(|| AppError::BadRequest("Missing pgs_file".to_string()))?;
 
     // PUBLIC PLATFORM: Require email for job ownership and notifications
     let user_email = user_email.ok_or_else(|| {
@@ -689,11 +689,11 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
             // get_message() blocks until a message arrives (no timeout variant available)
             match pubsub.get_message() {
                 Ok(msg) => {
-                    if let Ok(payload) = msg.get_payload::<String>() {
-                        if tx.send(payload).is_err() {
-                            // Channel closed, stop polling
-                            break;
-                        }
+                    if let Ok(payload) = msg.get_payload::<String>()
+                        && tx.send(payload).is_err()
+                    {
+                        // Channel closed, stop polling
+                        break;
                     }
                 }
                 Err(e) => {
@@ -761,10 +761,6 @@ async fn handle_progress_socket(socket: WebSocket, state: AppState, job_id: Uuid
     info!("WebSocket disconnected for job {}", job_id);
 }
 
-#[derive(Deserialize)]
-pub struct DownloadQuery {
-    format: Option<String>,
-}
 // Old insecure download endpoint removed - replaced with secure token-based download (Phase 6)
 // See download_results() below for the new implementation with password verification
 
@@ -1170,7 +1166,6 @@ pub struct DownloadRequest {
 #[derive(Debug, sqlx::FromRow)]
 struct JobDownloadRecord {
     id: Uuid,
-    user_id: String,
     status: String,
     result_path: Option<String>,
     metadata: Option<serde_json::Value>,
@@ -1242,22 +1237,22 @@ async fn validate_download_credentials(
         return Err(AppError::BadRequest("Job not completed".to_string()));
     }
 
-    if let Some(expires_at) = job.expires_at {
-        if expires_at < Utc::now() {
-            let _ = record_download_attempt(
-                pool,
-                job_id,
-                &client_ip,
-                "unknown",
-                true,
-                true,
-                true,
-                false,
-                "job_expired",
-            )
-            .await;
-            return Err(AppError::BadRequest("Download link expired".to_string()));
-        }
+    if let Some(expires_at) = job.expires_at
+        && expires_at < Utc::now()
+    {
+        let _ = record_download_attempt(
+            pool,
+            job_id,
+            &client_ip,
+            "unknown",
+            true,
+            true,
+            true,
+            false,
+            "job_expired",
+        )
+        .await;
+        return Err(AppError::BadRequest("Download link expired".to_string()));
     }
 
     if job.download_attempts >= job.max_download_attempts {
@@ -1436,6 +1431,8 @@ pub async fn download_results(
 }
 
 /// Record download attempt in audit table
+// Each argument maps to one audit column.
+#[allow(clippy::too_many_arguments)]
 async fn record_download_attempt(
     pool: &sqlx::PgPool,
     job_id: Uuid,
@@ -1490,7 +1487,7 @@ pub async fn get_visualization(
     let viz_data = validated
         .metadata
         .and_then(|m| m.get("visualization").cloned())
-        .ok_or_else(|| AppError::NotFound)?;
+        .ok_or(AppError::NotFound)?;
 
     info!("Serving visualization data for job {}", validated.id);
 
@@ -1543,7 +1540,7 @@ pub async fn get_visualization_by_job(
 
     let viz_data = metadata
         .and_then(|m| m.get("visualization").cloned())
-        .ok_or_else(|| AppError::NotFound)?;
+        .ok_or(AppError::NotFound)?;
 
     info!(
         "Serving visualization data for job {} (direct access)",
@@ -1557,6 +1554,28 @@ pub async fn get_visualization_by_job(
 // JOB MANAGEMENT ENDPOINTS
 // ==============================================================================
 
+/// (id, status, created_at, started_at, completed_at, expires_at, download_token)
+type PublicStatusRow = (
+    Uuid,
+    String,
+    chrono::DateTime<Utc>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<String>,
+);
+
+/// (id, status, user_email, download_token, completed_at, expires_at, last_email_resent_at)
+type ResendEmailRow = (
+    Uuid,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+    Option<chrono::DateTime<Utc>>,
+);
+
 /// Public job status lookup (no auth required, UUID is the secret)
 pub async fn get_job_public_status(
     State(state): State<AppState>,
@@ -1564,15 +1583,7 @@ pub async fn get_job_public_status(
 ) -> Result<Json<JobPublicStatusResponse>, AppError> {
     let (mut tx, _owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
-    let row: Option<(
-        Uuid,
-        String,
-        chrono::DateTime<Utc>,
-        Option<chrono::DateTime<Utc>>,
-        Option<chrono::DateTime<Utc>>,
-        Option<chrono::DateTime<Utc>>,
-        Option<String>,
-    )> = sqlx::query_as(
+    let row: Option<PublicStatusRow> = sqlx::query_as(
         "SELECT id, status, created_at, started_at, completed_at, expires_at, download_token
              FROM genetics.genetics_jobs WHERE id = $1",
     )
@@ -1590,7 +1601,7 @@ pub async fn get_job_public_status(
 
     let has_download = download_token.is_some()
         && status == "completed"
-        && expires_at.map_or(false, |exp| exp > Utc::now());
+        && expires_at.is_some_and(|exp| exp > Utc::now());
 
     Ok(Json(JobPublicStatusResponse {
         job_id: id,
@@ -1611,9 +1622,7 @@ pub async fn resend_email(
     // Fetch job details
     let (mut tx, owner) = db::scoped_tx_for_job(state.db_pool(), job_id).await?;
 
-    let row: Option<(Uuid, String, Option<String>, Option<String>,
-        Option<chrono::DateTime<Utc>>, Option<chrono::DateTime<Utc>>,
-        Option<chrono::DateTime<Utc>>)> =
+    let row: Option<ResendEmailRow> =
         sqlx::query_as(
             "SELECT id, status, user_email, download_token, completed_at, expires_at, last_email_resent_at
              FROM genetics.genetics_jobs WHERE id = $1"
@@ -1634,10 +1643,10 @@ pub async fn resend_email(
     if status != "completed" {
         return Err(AppError::BadRequest("Job is not completed yet".to_string()));
     }
-    if let Some(exp) = expires_at {
-        if exp < Utc::now() {
-            return Err(AppError::BadRequest("Job has expired".to_string()));
-        }
+    if let Some(exp) = expires_at
+        && exp < Utc::now()
+    {
+        return Err(AppError::BadRequest("Job has expired".to_string()));
     }
     let user_email = user_email
         .ok_or_else(|| AppError::BadRequest("No email address on file for this job".to_string()))?;

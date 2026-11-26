@@ -14,15 +14,11 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::Rng;
 
 // ==============================================================================
 // CONSTANTS
 // ==============================================================================
-
-/// Token length in bytes (32 bytes = 256 bits)
-const TOKEN_BYTES: usize = 32;
 
 /// Password length in characters
 const PASSWORD_LENGTH: usize = 16;
@@ -38,36 +34,6 @@ const RECOVERY_CODE_LENGTH: usize = 12;
 
 /// Number of recovery codes generated per job
 pub const RECOVERY_CODE_COUNT: usize = 8;
-
-// ==============================================================================
-// TOKEN GENERATION
-// ==============================================================================
-
-/// Generates a cryptographically secure random token for download URLs
-///
-/// Returns a URL-safe base64-encoded string of 32 random bytes (256 bits of entropy).
-/// The resulting string is approximately 43 characters long.
-///
-/// # Examples
-///
-/// ```
-/// let token = generate_download_token()?;
-/// assert_eq!(token.len(), 43); // Base64 URL-safe encoding of 32 bytes
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if the random number generator fails (extremely rare)
-pub fn generate_download_token() -> Result<String> {
-    let mut rng = rand::thread_rng();
-    let mut bytes = [0u8; TOKEN_BYTES];
-    rng.fill(&mut bytes);
-
-    // Encode to URL-safe base64 without padding
-    let token = URL_SAFE_NO_PAD.encode(&bytes);
-
-    Ok(token)
-}
 
 // ==============================================================================
 // PASSWORD GENERATION
@@ -240,25 +206,6 @@ pub fn generate_recovery_codes() -> Result<(Vec<String>, Vec<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_generate_download_token() {
-        let token = generate_download_token().unwrap();
-
-        // Token should be URL-safe base64 of 32 bytes (43 chars)
-        assert_eq!(token.len(), 43);
-
-        // Should only contain URL-safe base64 characters
-        assert!(
-            token
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-        );
-
-        // Two tokens should be different
-        let token2 = generate_download_token().unwrap();
-        assert_ne!(token, token2);
-    }
 
     #[test]
     fn test_generate_download_password() {

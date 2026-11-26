@@ -20,7 +20,7 @@ use tracing::{debug, info};
 /// Pass pattern:
 /// 1. 0x00 (all zeros)
 /// 2. 0xFF (all ones)
-/// 3-6. Random data
+///    3-6. Random data
 /// 7. 0x00 (all zeros)
 ///
 /// After overwriting, the file is unlinked from the filesystem.
@@ -62,7 +62,7 @@ pub async fn secure_delete_file(path: &Path) -> Result<()> {
         };
 
         // Create buffer with pattern
-        let buffer = if pass >= 2 && pass <= 5 {
+        let buffer = if (2..=5).contains(&pass) {
             // Random data: generate new random bytes for each chunk
             vec![0u8; size]
                 .into_iter()

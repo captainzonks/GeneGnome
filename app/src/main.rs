@@ -13,15 +13,7 @@ use clap::Parser;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod audit;
-mod genotype_converter;
-mod models;
-mod output;
-mod parsers;
-mod processor;
-mod reference_panel;
-mod secure_delete;
-mod validator;
+use genetics_processor::{audit, models, processor};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

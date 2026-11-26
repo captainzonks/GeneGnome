@@ -8,7 +8,7 @@
 // Version: 1.0.0
 // ==============================================================================
 
-use genetics_processor::parsers::pgs::{PgsParser, PgsRecord};
+use genetics_processor::parsers::pgs::PgsParser;
 use std::io::Write;
 use tempfile::NamedTempFile;
 

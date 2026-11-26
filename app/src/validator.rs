@@ -87,14 +87,14 @@ impl FileValidator {
         debug!("Extension check passed: {}", ext);
 
         // 4. Magic number verification
-        if let Some(expected_magic) = self.allowed_types.get(&ext) {
-            if !expected_magic.is_empty() {
-                let actual_magic = self.read_magic_number(file_path)?;
-                if !self.verify_magic_number(expected_magic, &actual_magic) {
-                    anyhow::bail!("Magic number mismatch for .{} file", ext);
-                }
-                debug!("Magic number check passed");
+        if let Some(expected_magic) = self.allowed_types.get(&ext)
+            && !expected_magic.is_empty()
+        {
+            let actual_magic = self.read_magic_number(file_path)?;
+            if !self.verify_magic_number(expected_magic, &actual_magic) {
+                anyhow::bail!("Magic number mismatch for .{} file", ext);
             }
+            debug!("Magic number check passed");
         }
 
         // 5. Content validation (basic format check)

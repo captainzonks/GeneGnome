@@ -34,9 +34,6 @@ struct AppStateInner {
     /// Upload directory (within encrypted volume)
     pub upload_dir: PathBuf,
 
-    /// Processing directory (within encrypted volume)
-    pub processing_dir: PathBuf,
-
     /// Results directory (within encrypted volume)
     pub results_dir: PathBuf,
 }
@@ -97,7 +94,6 @@ impl AppState {
                 redis_client,
                 encrypted_volume_path,
                 upload_dir,
-                processing_dir,
                 results_dir,
             }),
         })
@@ -121,11 +117,6 @@ impl AppState {
     /// Get upload directory
     pub fn upload_dir(&self) -> &PathBuf {
         &self.inner.upload_dir
-    }
-
-    /// Get processing directory
-    pub fn processing_dir(&self) -> &PathBuf {
-        &self.inner.processing_dir
     }
 
     /// Get results directory

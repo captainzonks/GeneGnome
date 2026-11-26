@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 // Apache Arrow/Parquet for columnar data
 use arrow::array::{ArrayRef, Float64Array, StringArray, UInt64Array};
 use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::{RecordBatch, RecordBatchReader};
+use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
@@ -271,10 +271,6 @@ struct StreamingState {
     // SQLite connection (kept open across chromosomes)
     sqlite_conn: Option<Connection>,
     sqlite_path: Option<PathBuf>,
-    // JSON file handle and state
-    json_file: Option<std::fs::File>,
-    json_path: Option<PathBuf>,
-    json_first_chromosome: bool,
     // VCF file handle (gzip-compressed) - for merged format
     vcf_file: Option<flate2::write::GzEncoder<std::fs::File>>,
     vcf_path: Option<PathBuf>,
@@ -1571,9 +1567,6 @@ impl OutputGenerator {
             vcf_format,
             sqlite_conn: None,
             sqlite_path: None,
-            json_file: None,
-            json_path: None,
-            json_first_chromosome: true,
             vcf_file: None,
             vcf_path: None,
             vcf_header_written: false,
@@ -2387,7 +2380,7 @@ impl OutputGenerator {
         for format in &state.formats {
             match format {
                 OutputFormat::Sqlite => {
-                    if let (Some(mut conn), Some(path)) =
+                    if let (Some(conn), Some(path)) =
                         (state.sqlite_conn.take(), state.sqlite_path.take())
                     {
                         info!("Finalizing SQLite database...");
@@ -2504,7 +2497,7 @@ impl OutputGenerator {
                     }
                 }
                 OutputFormat::Parquet => {
-                    if let Some(base_path) = &state.parquet_base_path {
+                    if let Some(_base_path) = &state.parquet_base_path {
                         info!(
                             "Finalizing Parquet files ({} chromosome files)...",
                             state.parquet_files.len()

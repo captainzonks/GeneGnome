@@ -9,12 +9,12 @@
 // Security: Allowlist-only file types, magic number verification, size limits
 // ==============================================================================
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use axum::body::Bytes;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
-use tracing::{debug, info, warn};
+use std::io::{BufRead, BufReader};
+use tracing::{debug, info};
 
 // Maximum file sizes (enforced at validation layer)
 const MAX_GENOME_FILE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
@@ -24,12 +24,9 @@ const MAX_CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50 MB per chunk
 
 #[derive(Debug)]
 pub struct ValidatedFile {
-    pub original_name: String,
     pub safe_name: String,
-    pub extension: String,
     pub size: usize,
     pub hash_sha256: String,
-    pub validated_at: chrono::DateTime<chrono::Utc>,
 }
 
 pub struct FileValidator {
@@ -96,17 +93,17 @@ impl FileValidator {
         debug!("Extension check passed: .{}", ext);
 
         // 4. Magic number verification
-        if let Some(expected_magic) = self.allowed_types.get(&ext) {
-            if !expected_magic.is_empty() {
-                if file_data.len() < expected_magic.len() {
-                    anyhow::bail!("File too small to contain magic number");
-                }
-                let actual_magic = &file_data[..expected_magic.len()];
-                if !self.verify_magic_number(expected_magic, actual_magic) {
-                    anyhow::bail!("Magic number mismatch for .{} file", ext);
-                }
-                debug!("Magic number check passed");
+        if let Some(expected_magic) = self.allowed_types.get(&ext)
+            && !expected_magic.is_empty()
+        {
+            if file_data.len() < expected_magic.len() {
+                anyhow::bail!("File too small to contain magic number");
             }
+            let actual_magic = &file_data[..expected_magic.len()];
+            if !self.verify_magic_number(expected_magic, actual_magic) {
+                anyhow::bail!("Magic number mismatch for .{} file", ext);
+            }
+            debug!("Magic number check passed");
         }
 
         // 5. Content validation (basic format check)
@@ -118,12 +115,9 @@ impl FileValidator {
         debug!("SHA-256: {}", hash);
 
         Ok(ValidatedFile {
-            original_name: filename.to_string(),
             safe_name,
-            extension: ext,
             size,
             hash_sha256: hash,
-            validated_at: chrono::Utc::now(),
         })
     }
 
@@ -239,7 +233,7 @@ impl FileValidator {
         // PGS files are tab-separated or space-separated text files
         // Should have at least a header line with rsid and effect columns
         let reader = BufReader::new(&data[..]);
-        let mut lines = reader.lines();
+        let lines = reader.lines();
 
         // Check first non-comment line
         for line in lines.take(100) {

@@ -213,7 +213,7 @@ impl VCFParser {
 
         // Extract position
         let position = match record.variant_start() {
-            Some(Ok(pos)) => usize::from(pos.get()) as u64,
+            Some(Ok(pos)) => pos.get() as u64,
             Some(Err(e)) => {
                 return Err(VCFParseError::RecordError(format!(
                     "Failed to get position: {}",
@@ -256,10 +256,10 @@ impl VCFParser {
         let imputation_quality = self.extract_dr2(record, header);
 
         // Apply quality filter
-        if let Some(quality) = imputation_quality {
-            if quality < self.min_quality {
-                return Ok(None); // Skip low-quality SNPs
-            }
+        if let Some(quality) = imputation_quality
+            && quality < self.min_quality
+        {
+            return Ok(None); // Skip low-quality SNPs
         }
 
         Ok(Some(VCFRecord {
@@ -404,8 +404,8 @@ impl VCFParser {
 
         // Split INFO field by semicolons
         for field in info.split(';') {
-            if field.starts_with("R2=") {
-                let r2_str = &field[3..]; // Skip "R2="
+            if let Some(r2_str) = field.strip_prefix("R2=") {
+                // Skip "R2="
                 if let Ok(r2) = r2_str.parse::<f64>() {
                     return Some(r2);
                 }
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_dosage_validation() {
-        let parser = VCFParser::new();
+        let _parser = VCFParser::new();
 
         // Valid dosages
         assert!(

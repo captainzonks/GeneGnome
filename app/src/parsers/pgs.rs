@@ -138,8 +138,7 @@ impl PgsParser {
         let mut unscaled = Vec::new();
 
         for (idx, result) in reader.deserialize().enumerate() {
-            let record: PgsRecord =
-                result.map_err(|e| PgsParseError::CsvError(csv::Error::from(e)))?;
+            let record: PgsRecord = result.map_err(PgsParseError::CsvError)?;
 
             // Validate score value is finite
             if !record.value.is_finite() {
@@ -234,7 +233,7 @@ impl PgsParser {
         for record in records {
             by_label
                 .entry(record.label.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(record);
         }
 

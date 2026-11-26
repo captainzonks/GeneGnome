@@ -70,20 +70,6 @@ impl JobQueue {
         Ok(())
     }
 
-    /// Publish progress update to pub/sub channel
-    pub fn publish_progress(&self, job_id: Uuid, message: &str) -> Result<()> {
-        let mut conn = self
-            .client
-            .get_connection()
-            .context("Failed to get Redis connection")?;
-
-        let channel = format!("genetics:progress:{}", job_id);
-        conn.publish::<_, _, ()>(channel, message)
-            .context("Failed to publish progress update")?;
-
-        Ok(())
-    }
-
     /// Get pub/sub channel name for a job
     pub fn progress_channel(job_id: Uuid) -> String {
         format!("genetics:progress:{}", job_id)
@@ -94,26 +80,6 @@ impl JobQueue {
         self.client
             .get_connection()
             .context("Failed to get Redis connection for pub/sub")
-    }
-
-    /// Get job data
-    pub fn get_job(&self, job_id: Uuid) -> Result<Option<JobPayload>> {
-        let mut conn = self
-            .client
-            .get_connection()
-            .context("Failed to get Redis connection")?;
-
-        let job_key = format!("{}{}", JOB_PREFIX, job_id);
-        let payload_json: Option<String> = conn.get(&job_key).context("Failed to get job data")?;
-
-        match payload_json {
-            Some(json) => {
-                let payload =
-                    serde_json::from_str(&json).context("Failed to deserialize job payload")?;
-                Ok(Some(payload))
-            }
-            None => Ok(None),
-        }
     }
 
     /// Delete job data from Redis
@@ -128,17 +94,5 @@ impl JobQueue {
             .context("Failed to delete job data")?;
 
         Ok(())
-    }
-
-    /// Get queue length
-    pub fn queue_length(&self) -> Result<usize> {
-        let mut conn = self
-            .client
-            .get_connection()
-            .context("Failed to get Redis connection")?;
-
-        let len: usize = conn.llen(QUEUE_KEY).context("Failed to get queue length")?;
-
-        Ok(len)
     }
 }

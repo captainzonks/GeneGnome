@@ -10,7 +10,6 @@
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json;
 use std::path::Path;
 use tracing::info;
 
@@ -151,8 +150,6 @@ impl ReferencePanelReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::tempdir;
 
     #[test]
     fn test_reference_panel_structure() {

@@ -19,7 +19,7 @@ use lettre::{
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
 // ==============================================================================

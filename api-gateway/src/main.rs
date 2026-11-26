@@ -12,8 +12,7 @@ use anyhow::{Context, Result};
 use axum::{
     Router,
     extract::DefaultBodyLimit,
-    http::{Method, StatusCode, header},
-    response::IntoResponse,
+    http::{Method, header},
     routing::{delete, get, post},
 };
 use std::net::SocketAddr;
@@ -28,7 +27,6 @@ mod db;
 mod email;
 mod error;
 mod handlers;
-mod middleware;
 mod models;
 mod queue;
 mod security;
@@ -151,18 +149,6 @@ fn build_router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
         )
         .with_state(state)
-}
-
-// Timeout error handler
-async fn handle_timeout_error(err: tower::BoxError) -> impl IntoResponse {
-    if err.is::<tower::timeout::error::Elapsed>() {
-        (StatusCode::REQUEST_TIMEOUT, "Request timed out".to_string())
-    } else {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unhandled error: {}", err),
-        )
-    }
 }
 
 #[cfg(test)]

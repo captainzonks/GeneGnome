@@ -10,9 +10,11 @@
 // ==============================================================================
 
 use anyhow::{Context, Result};
+#[cfg(test)]
+use argon2::password_hash::{PasswordHash, PasswordVerifier};
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::Rng;
@@ -55,7 +57,7 @@ pub fn generate_download_token() -> Result<String> {
     rng.fill(&mut bytes);
 
     // Encode to URL-safe base64 without padding
-    let token = URL_SAFE_NO_PAD.encode(&bytes);
+    let token = URL_SAFE_NO_PAD.encode(bytes);
 
     Ok(token)
 }
@@ -165,6 +167,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// Returns an error if:
 /// - The hash string is malformed
 /// - Password verification fails
+#[cfg(test)]
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
     let parsed_hash = PasswordHash::new(hash).context("Failed to parse password hash")?;
 
